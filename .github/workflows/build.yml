@@ -27,6 +27,7 @@ jobs:
           rm -rf lib pubspec.yaml
           cp -r /tmp/keep/lib .
           cp /tmp/keep/pubspec.yaml .
+          rm -rf test
 
       - run: flutter pub get
 
