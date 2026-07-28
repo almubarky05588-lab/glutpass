@@ -1,0 +1,35 @@
+name: Build iOS
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  ios:
+    runs-on: macos-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - run: flutter --version
+
+      - name: Generate iOS project
+        run: |
+          mkdir -p /tmp/keep
+          cp -r lib pubspec.yaml /tmp/keep/
+          flutter create --platforms=ios --org com.glutpass --project-name glutpass .
+          rm -rf lib pubspec.yaml
+          cp -r /tmp/keep/lib .
+          cp /tmp/keep/pubspec.yaml .
+
+      - run: flutter pub get
+
+      - run: flutter analyze --no-fatal-infos --no-fatal-warnings
+
+      - run: flutter build ios --release --no-codesign
