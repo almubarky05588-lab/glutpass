@@ -465,3 +465,94 @@ async function vMod(){
   };
 }
 
+// ═══ الإشعارات ═══
+async function vNotif(){
+  const [cp,pl,us] = await Promise.all([
+    sb.from('notification_campaigns').select('*').order('created_at',{ascending:false}),
+    sb.from('places').select('id,name_ar').order('name_ar'),
+    sb.from('profiles').select('id,is_celiac')
+  ]);
+  const C=cp.data||[], P=pl.data||[], U=us.data||[];
+  const ST={draft:['مسودة','var(--grey)','var(--bg)'],
+    scheduled:['مجدولة','var(--amber)','var(--amberLt)'],
+    sent:['مرسلة','var(--green)','var(--greenLt)'],
+    cancelled:['ملغاة','var(--red)','var(--redLt)']};
+  $('#view').innerHTML=`
+  <div class="warn" style="background:var(--amberLt);color:var(--amber)">
+    ⏳ خدمة الإرسال (FCM) لم تُفعّل بعد — تحتاج مفتاح APNs من حساب آبل.
+    الحملات تُحفظ الآن كاملةً وتُرسل فور التفعيل.</div>
+  <div class="grid"><div>
+    <div class="card" style="margin-bottom:20px"><b>حملة إشعار جديدة</b>
+      <p class="muted" style="margin:4px 0 14px">تصل أجهزة المستخدمين المطابقين</p>
+      <label class="muted">عنوان الإشعار</label>
+      <input id="nt" placeholder="جرّب قائمة لوسين الجديدة">
+      <label class="muted" style="display:block;margin-top:12px">نص الإشعار</label>
+      <textarea id="nb" placeholder="مطعم لوسين أضاف ٦ أطباق آمنة معتمدة..."></textarea>
+      <label class="muted" style="display:block;margin-top:12px">الجمهور المستهدف</label>
+      <select id="na">
+        <option value="all">الجميع (${U.length})</option>
+        <option value="celiac_only">مرضى السيلياك فقط (${U.filter(u=>u.is_celiac).length})</option>
+        <option value="city">حسب المدينة</option>
+        <option value="saved_place">من حفظوا مكاناً معيّناً</option>
+      </select>
+      <label class="muted" style="display:block;margin-top:12px">الوجهة عند الضغط</label>
+      <select id="nd"><option value="none">لا شيء</option>
+        ${P.map(p=>`<option value="${p.id}">صفحة — ${esc(p.name_ar)}</option>`).join('')}</select>
+      <div class="row" style="margin-top:16px;flex-wrap:wrap">
+        <button class="btn" id="nsave">حفظ الحملة</button>
+        <button class="btn sec" disabled title="يحتاج FCM">إرسال — معطّل</button></div>
+      <p id="nmsg" style="font-size:12px;margin-top:10px"></p>
+    </div>
+    <div class="card"><b>الحملات (${C.length})</b>
+      <table style="margin-top:12px"><thead><tr><th>العنوان</th><th>الجمهور</th>
+      <th>الوصول المقدّر</th><th>الحالة</th><th></th></tr></thead><tbody>
+      ${C.map(x=>{const s=ST[x.status]||ST.draft;return `<tr>
+        <td><b>${esc(x.title_ar)}</b><div class="muted">${esc(x.body_ar).slice(0,50)}…</div></td>
+        <td class="muted">${x.audience_type==='celiac_only'?'سيلياك':x.audience_type==='all'?'الجميع':esc(x.audience_type)}</td>
+        <td>${x.estimated_reach}</td>
+        <td><span class="pill" style="color:${s[1]};background:${s[2]}">${s[0]}</span></td>
+        <td><button class="btn dgr cdel" data-id="${x.id}">حذف</button></td></tr>`;}).join('')
+        ||'<tr><td colspan="5" class="muted">لا توجد حملات بعد</td></tr>'}
+      </tbody></table></div>
+  </div>
+  <div class="card"><b>الإشعارات التلقائية</b>
+    <p class="muted" style="margin:4px 0 14px">يرسلها النظام بلا تدخل</p>
+    ${[['تغيّر تصنيف مكان محفوظ','تنبيه صحي — لا يمكن للمستخدم إيقافه',true],
+       ['قبول مكان أضافه المستخدم','',false],
+       ['رفض مكان مع بيان السبب','',false],
+       ['شكر عند بلوغ عدد تصويتات','',false],
+       ['حملات تسويقية','بحد أقصى ٢ أسبوعياً',false]]
+      .map((a,i)=>`<div style="padding:12px 0;border-top:${i?'1px solid var(--border)':'none'}">
+      <b style="font-size:12.5px">${a[0]}</b>
+      ${a[1]?`<div style="font-size:11px;color:${a[2]?'var(--red)':'var(--grey)'};margin-top:3px">${a[1]}</div>`:''}
+      ${a[2]?'<span class="pill" style="color:var(--red);background:var(--redLt);margin-top:6px">مقفل دائماً</span>':''}
+      </div>`).join('')}
+  </div></div>`;
+  const nm=(t,c)=>{const x=$('#nmsg');x.textContent=t;x.style.color=c;};
+  $('#nsave').onclick = async () => {
+    const t=$('#nt').value.trim(), b=$('#nb').value.trim();
+    if(!t||!b) return nm('اكتب العنوان والنص','var(--red)');
+    const aud=$('#na').value;
+    const reach = aud==='celiac_only' ? U.filter(u=>u.is_celiac).length : U.length;
+    const { error } = await sb.from('notification_campaigns').insert({
+      title_ar:t, body_ar:b, audience_type:aud,
+      deeplink_type:$('#nd').value==='none'?'none':'place',
+      deeplink_value:$('#nd').value==='none'?null:$('#nd').value,
+      status:'draft', estimated_reach:reach,
+      created_by:(await sb.auth.getUser()).data.user.id });
+    if(error) return nm(error.message,'var(--red)');
+    nm('✓ حُفظت الحملة — ستُرسل فور تفعيل FCM','var(--green)');
+    setTimeout(vNotif,900);
+  };
+  $('#view').onclick = async e => {
+    const d=e.target.closest('.cdel');
+    if(d && confirm('حذف هذه الحملة؟')){
+      await sb.from('notification_campaigns').delete().eq('id',d.dataset.id); vNotif(); }
+  };
+}
+
+sb.auth.getSession().then(({data})=>{ if(data.session) boot(); });
+</script>
+</body>
+</html>
+
