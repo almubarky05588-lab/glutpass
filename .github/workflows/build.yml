@@ -3,6 +3,9 @@ name: Build iOS
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - 'admin/**'
+      - 'README.md'
   workflow_dispatch:
 
 jobs:
