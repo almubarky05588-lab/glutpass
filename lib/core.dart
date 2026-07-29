@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'content.dart';
 
 const kUrl = 'https://sreabyhmxetaynqqhlwe.supabase.co';
 const kKey =
@@ -40,13 +41,20 @@ class Place {
       'safety_votes_count,dishes_count';
 
   bool get isSafe => safety == 'SEPARATE_PREP';
-  String get badgeText => isSafe ? 'آمن للسيلياك' : 'تحقّق قبل الطلب';
+
+  // النصوص تأتي من لوحة التحكم — ومعها نسخة مدمجة احتياطية
+  String get badgeText => isSafe
+      ? Content.t('safety.separate_prep.label')
+      : safety == 'SHARED_PREP'
+          ? Content.t('safety.shared_prep.label')
+          : Content.t('safety.unknown.label');
+
   Color get badgeBg => isSafe ? cSafeBg : cAmberBg;
   Color get badgeFg => isSafe ? cGreen : cAmber;
   IconData get badgeIcon => isSafe ? Icons.check : Icons.info_outline;
 
   String get safetyLine => pct == null
-      ? 'تجارب قليلة — يحتاج تأكيد'
+      ? Content.t('safety.low_sample_notice')
       : '${pct!.toStringAsFixed(0)}٪ بلا أعراض · $votes تجربة';
 
   Color get avatarColor {
