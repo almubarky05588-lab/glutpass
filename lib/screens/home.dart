@@ -10,13 +10,13 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  late Future<List<Place>> _future;
+  late Future<List<Place>> _f;
   String _city = 'الكل';
 
   @override
   void initState() {
     super.initState();
-    _future = _load();
+    _f = _load();
   }
 
   Future<List<Place>> _load() async {
@@ -25,121 +25,222 @@ class _HomeScreenState extends State<HomeScreen> {
         .select(Place.cols)
         .eq('status', 'published');
     if (_city != 'الكل') q = q.eq('city', _city);
-    final rows = await q.order('safety_votes_count', ascending: false);
-    return (rows as List)
+    final r = await q.order('safety_votes_count', ascending: false);
+    return (r as List)
         .map((e) => Place.fromMap(e as Map<String, dynamic>))
         .toList();
   }
 
-  void _refresh() => setState(() => _future = _load());
+  void _pick(String c) {
+    setState(() {
+      _city = c;
+      _f = _load();
+    });
+  }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext ctx) {
     return FutureBuilder<List<Place>>(
-      future: _future,
-      builder: (context, snap) {
-        if (snap.connectionState == ConnectionState.waiting) {
+      future: _f,
+      builder: (ctx, s) {
+        if (s.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator(color: cGreen));
         }
-        if (snap.hasError) {
-          return _Error(msg: '${snap.error}', onRetry: _refresh);
+        if (s.hasError) {
+          return Center(
+              child: Padding(
+                  padding: const EdgeInsets.all(28),
+                  child: Text('تعذّر الاتصال بقاعدة البيانات\n${s.error}',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(color: cGrey, fontSize: 12))));
         }
-        final places = snap.data ?? [];
-        return ListView(
-          padding: EdgeInsets.zero,
-          children: [
-            const _Header(),
-            const SizedBox(height: 12),
-            _SearchBar(onTap: () {
-              Navigator.push(context,
-                  MaterialPageRoute(builder: (_) => const SearchScreen()));
-            }),
-            const SizedBox(height: 16),
-            _Stats(places: places),
-            const SizedBox(height: 16),
-            const _Legend(),
-            const SizedBox(height: 16),
-            _CityChips(
-                selected: _city,
-                onSelect: (c) {
-                  setState(() => _city = c);
-                  _refresh();
-                }),
-            const SizedBox(height: 20),
-            const _SectionTitle(),
-            const SizedBox(height: 10),
-            if (places.isEmpty)
-              const Padding(
+        final ps = s.data ?? [];
+        final nd = ps.fold<int>(0, (a, p) => a + p.dishes);
+        final nv = ps.fold<int>(0, (a, p) => a + p.votes);
+        return ListView(padding: EdgeInsets.zero, children: [
+          _header(),
+          const SizedBox(height: 12),
+          _bar(ctx),
+          const SizedBox(height: 16),
+          _pad(Row(children: [
+            _stat('$nv', 'تجربة'),
+            const SizedBox(width: 10),
+            _stat('$nd', 'طبق'),
+            const SizedBox(width: 10),
+            _stat('${ps.length}', 'مطعم')
+          ])),
+          const SizedBox(height: 16),
+          _pad(_note(cSafeBg, cGreen, Icons.check,
+              'منطقة تحضير منفصلة — آمنة للسيلياك')),
+          const SizedBox(height: 6),
+          _pad(_note(cAmberBg, cAmber, Icons.warning_amber_rounded,
+              'مشتركة / غير معروفة — تحقّق قبل الطلب')),
+          const SizedBox(height: 16),
+          _chips(),
+          const SizedBox(height: 20),
+          _pad(const Row(children: [
+            Text('عرض الكل', style: TextStyle(color: cGreen, fontSize: 13)),
+            Spacer(),
+            Text('الأكثر تصويتاً',
+                style: TextStyle(
+                    color: cDark, fontSize: 17, fontWeight: FontWeight.w700))
+          ])),
+          const SizedBox(height: 10),
+          if (ps.isEmpty)
+            const Padding(
                 padding: EdgeInsets.all(32),
                 child: Text('لا توجد أماكن في هذه المدينة بعد',
                     textAlign: TextAlign.center,
-                    style: TextStyle(color: cGrey)),
-              ),
-            ...places.map((p) => _Card(place: p)),
-            const SizedBox(height: 100),
-          ],
-        );
+                    style: TextStyle(color: cGrey))),
+          ...ps.map(_card),
+          const SizedBox(height: 100),
+        ]);
       },
     );
   }
-}
 
-class _Header extends StatelessWidget {
-  const _Header();
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 96,
-      color: cGreen,
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      child: Row(
-        children: [
+  Widget _pad(Widget w) =>
+      Padding(padding: const EdgeInsets.symmetric(horizontal: 20), child: w);
+
+  Widget _header() => Container(
+        height: 96,
+        color: cGreen,
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        child: Row(children: [
           Container(
-            width: 46,
-            height: 46,
-            decoration: BoxDecoration(
-                color: Colors.white24,
-                borderRadius: BorderRadius.circular(14)),
-            child:
-                const Icon(Icons.person_outline, color: Colors.white, size: 22),
-          ),
+              width: 46,
+              height: 46,
+              decoration: BoxDecoration(
+                  color: Colors.white24,
+                  borderRadius: BorderRadius.circular(14)),
+              child: const Icon(Icons.person_outline,
+                  color: Colors.white, size: 22)),
           const Spacer(),
           const Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text('GlutPass',
-                  style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.w700)),
-              SizedBox(height: 2),
-              Text('مجتمع خالي من الجلوتين',
-                  style: TextStyle(color: Colors.white70, fontSize: 12)),
-            ],
-          ),
+              crossAxisAlignment: CrossAxisAlignment.end,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text('GlutPass',
+                    style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700)),
+                SizedBox(height: 2),
+                Text('مجتمع خالي من الجلوتين',
+                    style: TextStyle(color: Colors.white70, fontSize: 12)),
+              ]),
           const SizedBox(width: 10),
           Container(
-            width: 46,
-            height: 46,
-            decoration: BoxDecoration(
-                color: Colors.white, borderRadius: BorderRadius.circular(14)),
-            child: const Icon(Icons.eco, color: cGreen, size: 26),
-          ),
-        ],
-      ),
-    );
-  }
-}
+              width: 46,
+              height: 46,
+              decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(14)),
+              child: const Icon(Icons.eco, color: cGreen, size: 26)),
+        ]),
+      );
 
-class _SearchBar extends StatelessWidget {
-  final VoidCallback onTap;
-  const _SearchBar({required this.onTap});
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        height: 48,
-        margin: const EdgeInsets.symmetric(horizontal: 20),
-        padding: const EdgeInsets.symmetric(horizontal: 
+  Widget _bar(BuildContext ctx) => GestureDetector(
+        onTap: () => Navigator.push(
+            ctx, MaterialPageRoute(builder: (_) => const SearchScreen())),
+        child: Container(
+          height: 48,
+          margin: const EdgeInsets.symmetric(horizontal: 20),
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: cBorder)),
+          child: const Row(children: [
+            Expanded(
+                child: Text('ابحث عن مطعم أو طبق...',
+                    style: TextStyle(color: cGrey, fontSize: 14))),
+            Icon(Icons.search, color: cGrey, size: 20),
+          ]),
+        ),
+      );
+
+  Widget _stat(String n, String l) => Expanded(
+        child: Container(
+          height: 52,
+          decoration: BoxDecoration(
+              color: cSafeBg, borderRadius: BorderRadius.circular(14)),
+          child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+            Text(n,
+                style: const TextStyle(
+                    color: cGreen, fontSize: 15, fontWeight: FontWeight.w700)),
+            Text(l, style: const TextStyle(color: cGreen, fontSize: 11)),
+          ]),
+        ),
+      );
+
+  Widget _note(Color bg, Color fg, IconData ic, String t) => Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+        decoration:
+            BoxDecoration(color: bg, borderRadius: BorderRadius.circular(10)),
+        child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+          Text(t, style: TextStyle(color: fg, fontSize: 12)),
+          const SizedBox(width: 6),
+          Icon(ic, color: fg, size: 14),
+        ]),
+      );
+
+  Widget _chips() => SizedBox(
+        height: 36,
+        child: ListView.separated(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          itemCount: 4,
+          separatorBuilder: (_, __) => const SizedBox(width: 8),
+          itemBuilder: (_, i) {
+            final c = ['الكل', 'الرياض', 'جدة', 'الدمام'][i];
+            final on = c == _city;
+            return GestureDetector(
+              onTap: () => _pick(c),
+              child: Container(
+                alignment: Alignment.center,
+                padding: const EdgeInsets.symmetric(horizontal: 18),
+                decoration: BoxDecoration(
+                    color: on ? cGreen : Colors.white,
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(color: on ? cGreen : cBorder)),
+                child: Text(c,
+                    style: TextStyle(
+                        color: on ? Colors.white : cDark,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600)),
+              ),
+            );
+          },
+        ),
+      );
+
+  Widget _card(Place p) => Container(
+        margin: const EdgeInsets.fromLTRB(20, 0, 20, 10),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: cBorder)),
+        child: Row(children: [
+          SafetyBadge(p),
+          const Spacer(),
+          Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+            Text(p.nameAr,
+                style: const TextStyle(
+                    fontSize: 16, fontWeight: FontWeight.w700, color: cDark)),
+            if (p.nameEn != null)
+              Text(p.nameEn!,
+                  style: const TextStyle(fontSize: 11, color: cGrey)),
+            const SizedBox(height: 2),
+            Text('${p.cuisine ?? ''} · ${p.branch ?? ''}',
+                style: const TextStyle(fontSize: 12, color: cGrey)),
+            const SizedBox(height: 5),
+            RatingRow(p),
+          ]),
+          const SizedBox(width: 10),
+          PlaceAvatar(p),
+        ]),
+      );
+}
