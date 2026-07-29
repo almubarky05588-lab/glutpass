@@ -15,7 +15,7 @@
 body{font-family:Tajawal,sans-serif;background:var(--bg);color:var(--dark)}
 button{font-family:inherit;cursor:pointer;border:none}
 [hidden]{display:none!important}
-  input,textarea,select{font-family:inherit;width:100%;padding:10px 12px;
+input,textarea,select{font-family:inherit;width:100%;padding:10px 12px;
   border:1px solid var(--border);border-radius:9px;background:#fff;
   font-size:14px;color:var(--dark)}
 textarea{resize:vertical;min-height:70px;line-height:1.7}
@@ -30,8 +30,6 @@ textarea{resize:vertical;min-height:70px;line-height:1.7}
 .muted{color:var(--grey);font-size:12px}
 .row{display:flex;align-items:center;gap:10px}
 .sp{flex:1}
-
-/* تسجيل الدخول */
 #login{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
 #login .card{width:100%;max-width:380px;text-align:center}
 #login h1{font-size:22px;margin:14px 0 4px}
@@ -40,8 +38,6 @@ textarea{resize:vertical;min-height:70px;line-height:1.7}
 .logo{width:52px;height:52px;border-radius:16px;background:var(--green);
   margin:0 auto;display:flex;align-items:center;justify-content:center;
   color:#fff;font-size:24px;font-weight:700}
-
-/* الهيكل */
 #app{display:flex;min-height:100vh}
 aside{width:250px;background:#fff;border-left:1px solid var(--border);
   padding:22px 16px;position:sticky;top:0;height:100vh;flex-shrink:0}
@@ -57,19 +53,11 @@ header{background:#fff;border-bottom:1px solid var(--border);
   padding:18px 28px;display:flex;align-items:center;gap:12px}
 header h2{font-size:19px}
 #view{padding:24px 28px}
-
-/* جداول */
 table{width:100%;border-collapse:collapse}
 th{font-size:11px;color:var(--grey);text-align:right;padding:0 8px 10px;font-weight:700}
 td{padding:12px 8px;border-top:1px solid var(--border);font-size:13px;vertical-align:middle}
 tr.sel td{background:var(--greenLt)}
 .grid{display:grid;grid-template-columns:1fr 380px;gap:20px;align-items:start}
-@media(max-width:900px){
-  .grid{grid-template-columns:1fr}
-  aside{width:64px;padding:16px 8px}
-  aside .brand b,aside .brand span,nav button span{display:none}
-  #view{padding:16px}
-}
 .warn{background:var(--redLt);color:var(--red);padding:12px;border-radius:11px;
   font-size:12px;line-height:1.7;margin:12px 0}
 .ok{background:var(--greenLt);color:var(--green);padding:12px;border-radius:11px;
@@ -83,6 +71,23 @@ tr.sel td{background:var(--greenLt)}
 .sl{display:flex;justify-content:space-between;padding:8px 0;
   border-bottom:1px solid var(--border);font-size:12px}
 .sl:last-child{border:none}
+@media(max-width:900px){
+  .grid{grid-template-columns:1fr}
+  #app{flex-direction:column}
+  aside{width:100%;height:auto;position:static;padding:12px 14px;
+    border-left:none;border-bottom:1px solid var(--border)}
+  aside .brand{margin-bottom:12px}
+  nav{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px}
+  nav button{width:auto;white-space:nowrap;margin:0;flex-shrink:0;
+    border:1px solid var(--border);padding:9px 15px;font-size:12.5px}
+  aside .out{position:static;margin-top:10px}
+  aside .out .btn{width:auto!important;padding:8px 16px;font-size:12px}
+  header{padding:14px 16px}
+  .card{overflow-x:auto}
+  table{min-width:520px}
+  td,th{padding:9px 6px;font-size:12px}
+  #view{padding:14px}
+}
 </style>
 </head>
 <body>
@@ -113,321 +118,6 @@ tr.sel td{background:var(--greenLt)}
     <section id="view"></section>
   </main>
 </div>
-<script type="module">
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-
-const URL='https://sreabyhmxetaynqqhlwe.supabase.co';
-const KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNyZWFieWhteGV0YXlucXFobHdlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUyNzA3MjgsImV4cCI6MjEwMDg0NjcyOH0.a-5aEWl7FY9Q0CTK7AJVYvLCrW2MXNybfFFqh23xxN0';
-const sb = createClient(URL, KEY);
-
-const $ = s => document.querySelector(s);
-const esc = s => String(s??'').replace(/[&<>"]/g, c =>
-  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-
-const TABS = [
-  ['content','نصوص التطبيق'],
-  ['banners','البنرات الإعلانية'],
-  ['subs','طابور المساهمات'],
-  ['places','الأماكن وتصنيف الأمان'],
-];
-let tab = 'content';
-
-// ═══ الدخول ═══
-$('#go').onclick = async () => {
-  $('#lerr').textContent = '';
-  const { error } = await sb.auth.signInWithPassword({
-    email: $('#em').value.trim(), password: $('#pw').value });
-  if (error) { $('#lerr').textContent = error.message; return; }
-  boot();
-};
-$('#pw').onkeydown = e => { if (e.key === 'Enter') $('#go').click(); };
-$('#out').onclick = async () => { await sb.auth.signOut(); location.reload(); };
-
-async function boot(){
-  const { data:{ user } } = await sb.auth.getUser();
-  if (!user) return;
-  const { data:p } = await sb.from('profiles')
-    .select('full_name,role').eq('id', user.id).maybeSingle();
-  if (!p || (p.role !== 'admin' && p.role !== 'moderator')) {
-    $('#lerr').textContent = 'هذا الحساب ليس مشرفاً. تواصل مع مدير النظام.';
-    await sb.auth.signOut();
-    return;
-  }
-  $('#login').hidden = true;
-  $('#app').hidden = false;
-  $('#who').textContent = (p.full_name||'مشرف') + ' · ' +
-    (p.role==='admin'?'مدير النظام':'مشرف');
-  $('#nav').innerHTML = TABS.map(t =>
-    `<button data-t="${t[0]}" class="${t[0]===tab?'on':''}"><span>${t[1]}</span></button>`).join('');
-  $('#nav').onclick = e => {
-    const b = e.target.closest('button'); if (!b) return;
-    tab = b.dataset.t;
-    [...$('#nav').children].forEach(x => x.classList.toggle('on', x.dataset.t===tab));
-    render();
-  };
-  render();
-}
-
-function render(){
-  $('#ttl').textContent = TABS.find(t=>t[0]===tab)[1];
-  $('#view').innerHTML = '<p class="muted">جارِ التحميل…</p>';
-  ({content:vContent, banners:vBanners, subs:vSubs, places:vPlaces})[tab]();
-}
-
-// ═══ نصوص التطبيق ═══
-let curKey = null;
-async function vContent(){
-  const { data:keys } = await sb.from('content_keys')
-    .select('key,screen,description,tier,is_safety_critical').order('tier').order('key');
-  const { data:vals } = await sb.from('content_values')
-    .select('key,value,version,status,updated_at').eq('status','published');
-  const cur = Object.fromEntries((vals||[]).map(v=>[v.key,v]));
-  const TC = {A:['أ','var(--green)','var(--greenLt)'],
-              B:['ب','var(--red)','var(--redLt)'],
-              C:['ج','var(--blue)','var(--blueLt)']};
-  $('#view').innerHTML = `<div class="grid">
-    <div class="card">
-      <table><thead><tr><th>المفتاح</th><th>الشاشة</th><th>النص المنشور</th><th>الطبقة</th></tr></thead>
-      <tbody>${(keys||[]).map(k=>{
-        const t = TC[k.tier];
-        return `<tr data-k="${esc(k.key)}" style="cursor:pointer" class="${k.key===curKey?'sel':''}">
-          <td><b style="font-size:12px">${esc(k.key)}</b></td>
-          <td class="muted">${esc(k.screen)}</td>
-          <td>${esc(cur[k.key]?.value || '—')}</td>
-          <td><span class="pill" style="color:${t[1]};background:${t[2]}">${t[0]}</span>
-          ${k.is_safety_critical?'<span class="pill" style="color:var(--red)">حرج</span>':''}</td>
-        </tr>`;}).join('')}</tbody></table>
-    </div>
-    <div id="ed" class="card"><p class="muted">اختر مفتاحاً من الجدول لتحريره</p></div>
-  </div>`;
-  $('#view').querySelector('tbody').onclick = e => {
-    const tr = e.target.closest('tr'); if (!tr) return;
-    curKey = tr.dataset.k;
-    [...tr.parentNode.children].forEach(x=>x.classList.toggle('sel',x.dataset.k===curKey));
-    editor(keys.find(k=>k.key===curKey), cur[curKey]);
-  };
-  if (curKey) {
-    const k = keys.find(x=>x.key===curKey);
-    if (k) editor(k, cur[curKey]);
-  }
-}
-
-function editor(k, v){
-  const crit = k.is_safety_critical;
-  $('#ed').innerHTML = `
-    <b style="font-size:14px">${esc(k.key)}</b>
-    <p class="muted" style="margin:4px 0 10px">${esc(k.description||'')}</p>
-    ${crit?`<div class="warn">⚠ نص حرج للسلامة — تغييره يبدّل معنى تحذير صحي في التطبيق كله.
-      يُسجَّل التعديل باسمك، والسبب إلزامي.</div>`:''}
-    <label class="muted">النص المنشور حالياً</label>
-    <div style="background:var(--bg);border:1px solid var(--border);border-radius:9px;
-      padding:10px;margin:6px 0 14px;font-size:13px">${esc(v?.value || '— لا يوجد —')}</div>
-    <label class="muted">النص الجديد</label>
-    <textarea id="nv">${esc(v?.value||'')}</textarea>
-    <label class="muted" style="display:block;margin-top:12px">سبب التغيير
-      ${crit?'<span style="color:var(--red)">· إلزامي</span>':'<span>(اختياري)</span>'}</label>
-    <input id="nn" placeholder="اشرح سبب التعديل...">
-    <div class="row" style="margin-top:16px">
-      <button class="btn" id="pub">نشر للتطبيق</button>
-      <button class="btn sec" id="drf">حفظ كمسودة</button>
-    </div>
-    <p id="cmsg" style="font-size:12px;margin-top:10px"></p>`;
-  const save = async (status) => {
-    const val = $('#nv').value.trim(), note = $('#nn').value.trim();
-    if (!val) return msg('اكتب النص أولاً', 'var(--red)');
-    if (crit && !note) return msg('السبب إلزامي للنصوص الحرجة', 'var(--red)');
-    const ver = (v?.version || 0) + 1;
-    const { error } = await sb.from('content_values').insert({
-      key: k.key, locale: 'ar', value: val, version: ver,
-      status, change_note: note || null,
-      updated_by: (await sb.auth.getUser()).data.user.id });
-    if (error) return msg(error.message, 'var(--red)');
-    msg(status==='published' ? '✓ نُشر — سيصل التطبيق خلال دقائق' : '✓ حُفظ كمسودة', 'var(--green)');
-    setTimeout(vContent, 900);
-  };
-  const msg = (t,c) => { const e=$('#cmsg'); e.textContent=t; e.style.color=c; };
-  $('#pub').onclick = () => save('published');
-  $('#drf').onclick = () => save('draft');
-}
-
-// ═══ البنرات ═══
-async function vBanners(){
-  const { data:bs } = await sb.from('banners')
-    .select('*,places(name_ar)').order('sort_order');
-  const { data:pl } = await sb.from('places').select('id,name_ar').order('name_ar');
-  $('#view').innerHTML = `<div class="grid">
-    <div>
-      <div class="card" style="margin-bottom:20px">
-        <b>البنرات في الشريط المتحرك</b>
-        <p class="muted" style="margin:4px 0 14px">تتناوب أعلى الشاشة الرئيسية</p>
-        ${(bs||[]).length ? (bs||[]).map((b,i)=>`
-          <div class="row" style="padding:12px 0;border-top:${i?'1px solid var(--border)':'none'}">
-            <img class="thumb" src="${esc(b.image_url)}" alt="">
-            <div style="flex:1;min-width:0">
-              <b style="font-size:13px">${esc(b.title_ar||'بلا عنوان')}</b>
-              <div class="muted">${esc(b.places?.name_ar||'—')} · ترتيب ${b.sort_order}</div>
-              <div class="muted">${b.impressions} ظهور · ${b.clicks} نقرة</div>
-            </div>
-            <span class="pill" style="color:${b.is_active?'var(--green)':'var(--amber)'};
-              background:${b.is_active?'var(--greenLt)':'var(--amberLt)'}">
-              ${b.is_active?'نشط':'موقوف'}</span>
-            <button class="btn sec bt" data-id="${b.id}" data-a="${b.is_active}">
-              ${b.is_active?'إيقاف':'تفعيل'}</button>
-            <button class="btn dgr bd" data-id="${b.id}" data-p="${esc(b.image_url)}">حذف</button>
-          </div>`).join('') : '<p class="muted">لا توجد بنرات بعد</p>'}
-      </div>
-      <div class="card">
-        <b>رفع بنر جديد</b>
-        <div class="drop" style="margin:14px 0" id="dz">
-          اضغط لاختيار صورة الإعلان<br>
-          <span style="font-weight:400;color:var(--grey)">PNG أو JPG · ١٠٥٠×٣٩٦ · حتى ٢ ميجابايت</span>
-        </div>
-        <input type="file" id="fl" accept="image/*" hidden>
-        <img id="pv" class="thumb" style="width:100%;height:auto;display:none;margin-bottom:12px">
-        <label class="muted">عنوان البنر</label>
-        <input id="bt" placeholder="تجربة أرمنية فاخرة وآمنة">
-        <label class="muted" style="display:block;margin-top:10px">المطعم المرتبط</label>
-        <select id="bp"><option value="">— بلا ربط —</option>
-          ${(pl||[]).map(p=>`<option value="${p.id}">${esc(p.name_ar)}</option>`).join('')}</select>
-        <label class="muted" style="display:block;margin-top:10px">الترتيب</label>
-        <input id="bo" type="number" value="${(bs||[]).length+1}">
-        <button class="btn" id="bup" style="width:100%;margin-top:14px">رفع ونشر</button>
-        <p id="bmsg" style="font-size:12px;margin-top:10px"></p>
-      </div>
-    </div>
-    <div class="card">
-      <b>مواصفات ملف الإعلان</b>
-      <p class="muted" style="margin:4px 0 12px">أرسلها للمطعم</p>
-      <div class="spec"><b>١٠٥٠ × ٣٩٦ بكسل</b><span>النسبة ٢٫٦٥ : ١ · دقة @3x</span></div>
-      <div class="sl"><span class="muted">الصيغة</span><b>PNG أو JPG</b></div>
-      <div class="sl"><span class="muted">الحجم الأقصى</span><b>٢ ميجابايت</b></div>
-      <div class="sl"><span class="muted">المنطقة الآمنة</span><b>٤٠ بكسل من كل جهة</b></div>
-      <div class="sl"><span class="muted">أصغر خط</span><b>٢٤ بكسل</b></div>
-      <div class="sl"><span class="muted">العرض في التطبيق</span><b>٣٥٠ × ١٣٢ نقطة</b></div>
-    </div>
-  </div>`;
-
-  $('#dz').onclick = () => $('#fl').click();
-  $('#fl').onchange = e => {
-    const f = e.target.files[0]; if (!f) return;
-    $('#pv').src = URL_(f); $('#pv').style.display = 'block';
-  };
-  const URL_ = f => window.URL.createObjectURL(f);
-  const bm = (t,c) => { const x=$('#bmsg'); x.textContent=t; x.style.color=c; };
-
-  $('#bup').onclick = async () => {
-    const f = $('#fl').files[0];
-    if (!f) return bm('اختر صورة أولاً', 'var(--red)');
-    if (f.size > 2097152) return bm('الحجم أكبر من ٢ ميجابايت', 'var(--red)');
-    bm('جارِ الرفع…', 'var(--grey)');
-    const name = Date.now() + '_' + f.name.replace(/[^\w.]/g,'_');
-    const up = await sb.storage.from('banners').upload(name, f, { upsert:false });
-    if (up.error) return bm(up.error.message, 'var(--red)');
-    const url = sb.storage.from('banners').getPublicUrl(name).data.publicUrl;
-    const { error } = await sb.from('banners').insert({
-      title_ar: $('#bt').value.trim() || null,
-      place_id: $('#bp').value || null,
-      image_url: url, image_width: 1050, image_height: 396,
-      link_type: $('#bp').value ? 'place' : 'none',
-      link_value: $('#bp').value || null,
-      sort_order: +$('#bo').value || 1, is_active: true,
-      created_by: (await sb.auth.getUser()).data.user.id });
-    if (error) return bm(error.message, 'var(--red)');
-    bm('✓ رُفع ونُشر', 'var(--green)');
-    setTimeout(vBanners, 800);
-  };
-
-  $('#view').onclick = async e => {
-    const t = e.target.closest('.bt'), d = e.target.closest('.bd');
-    if (t) { await sb.from('banners').update({ is_active: t.dataset.a !== 'true' })
-      .eq('id', t.dataset.id); vBanners(); }
-    if (d && confirm('حذف هذا البنر نهائياً؟')) {
-      await sb.from('banners').delete().eq('id', d.dataset.id); vBanners(); }
-  };
-}
-
-// ═══ المساهمات ═══
-async function vSubs(){
-  const { data:s } = await sb.from('place_submissions')
-    .select('*').eq('status','pending').order('created_at',{ascending:false});
-  const LV = {SEPARATE_PREP:['آمن للسيلياك','var(--green)','var(--greenLt)'],
-    SHARED_PREP:['مشتركة','var(--amber)','var(--amberLt)'],
-    UNKNOWN:['غير معروف','var(--grey)','var(--bg)']};
-  $('#view').innerHTML = `<div class="card">
-    <b>مساهمات تنتظر المراجعة (${(s||[]).length})</b>
-    <table style="margin-top:14px"><thead><tr>
-      <th>المكان</th><th>المدينة</th><th>النوع</th><th>التصنيف المُدّعى</th>
-      <th>الأطباق</th><th>الإجراء</th></tr></thead><tbody>
-      ${(s||[]).map(r=>{const l=LV[r.claimed_safety];return `<tr>
-        <td><b>${esc(r.name)}</b><div class="muted">${esc(r.note||'')}</div></td>
-        <td>${esc(r.city)}</td><td>${esc(r.place_type)}</td>
-        <td><span class="pill" style="color:${l[1]};background:${l[2]}">${l[0]}</span></td>
-        <td class="muted">${esc((r.suggested_dishes||[]).join('، '))}</td>
-        <td><button class="btn ap" data-id="${r.id}">اعتماد</button>
-        <button class="btn dgr rj" data-id="${r.id}">رفض</button></td></tr>`;}).join('')
-      || '<tr><td colspan="6" class="muted">لا توجد مساهمات معلّقة</td></tr>'}
-    </tbody></table></div>`;
-  $('#view').onclick = async e => {
-    const a = e.target.closest('.ap'), r = e.target.closest('.rj');
-    const me = (await sb.auth.getUser()).data.user.id;
-    if (a) { await sb.from('place_submissions').update({status:'published',
-      reviewed_by:me, reviewed_at:new Date().toISOString()}).eq('id',a.dataset.id); vSubs(); }
-    if (r) { const why = prompt('سبب الرفض؟'); if (!why) return;
-      await sb.from('place_submissions').update({status:'rejected', review_note:why,
-        reviewed_by:me, reviewed_at:new Date().toISOString()}).eq('id',r.dataset.id); vSubs(); }
-  };
-}
-
-// ═══ الأماكن وتصنيف الأمان ═══
-async function vPlaces(){
-  const { data:p } = await sb.from('places')
-    .select('id,name_ar,city,computed_safety_status,override_safety_status,'+
-      'override_reason,safe_experience_pct,safety_votes_count')
-    .order('safety_votes_count',{ascending:false});
-  const N = {SEPARATE_PREP:['آمن للسيلياك','var(--green)','var(--greenLt)'],
-    SHARED_PREP:['تحقّق قبل الطلب','var(--amber)','var(--amberLt)'],
-    UNKNOWN:['غير معروف','var(--grey)','var(--bg)']};
-  $('#view').innerHTML = `<div class="card">
-    <b>الأماكن</b>
-    <p class="muted" style="margin:4px 0 14px">التجاوز اليدوي يُقفل التصنيف ويستوجب سبباً</p>
-    <table><thead><tr><th>المكان</th><th>المدينة</th><th>محسوب تلقائياً</th>
-      <th>تجاوز يدوي</th><th>تجارب الأمان</th><th>الإجراء</th></tr></thead><tbody>
-      ${(p||[]).map(x=>{const c=N[x.computed_safety_status],
-        o=x.override_safety_status?N[x.override_safety_status]:null;
-        return `<tr><td><b>${esc(x.name_ar)}</b></td><td>${esc(x.city)}</td>
-        <td><span class="pill" style="color:${c[1]};background:${c[2]}">${c[0]}</span></td>
-        <td>${o?`<span class="pill" style="color:${o[1]};background:${o[2]}">${o[0]}</span>
-          <div class="muted">${esc(x.override_reason||'')}</div>`:'<span class="muted">—</span>'}</td>
-        <td>${x.safe_experience_pct?x.safe_experience_pct+'٪ · '+x.safety_votes_count:'—'}</td>
-        <td>${o?`<button class="btn sec clr" data-id="${x.id}">إلغاء التجاوز</button>`:
-          `<button class="btn sec ovr" data-id="${x.id}">تجاوز</button>`}</td></tr>`;}).join('')}
-    </tbody></table></div>`;
-  $('#view').onclick = async e => {
-    const o = e.target.closest('.ovr'), c = e.target.closest('.clr');
-    if (o) {
-      const v = prompt('التصنيف الجديد:\n1 = آمن للسيلياك\n2 = تحقّق قبل الطلب\n3 = غير معروف');
-      const map = {'1':'SEPARATE_PREP','2':'SHARED_PREP','3':'UNKNOWN'};
-      if (!map[v]) return;
-      const why = prompt('سبب التجاوز (إلزامي):');
-      if (!why || !why.trim()) return alert('السبب إلزامي');
-      const { error } = await sb.from('places').update({
-        override_safety_status: map[v], override_reason: why.trim(),
-        override_by: (await sb.auth.getUser()).data.user.id }).eq('id', o.dataset.id);
-      if (error) alert(error.message);
-      vPlaces();
-    }
-    if (c && confirm('إرجاع التصنيف للحساب التلقائي؟')) {
-      await sb.from('places').update({ override_safety_status:null,
-        override_reason:null, override_by:null, override_at:null }).eq('id', c.dataset.id);
-      vPlaces();
-    }
-  };
-}
-
-sb.auth.getSession().then(({data}) => { if (data.session) boot(); });
-</script>
 
 </body>
 </html>
-
-
