@@ -361,8 +361,107 @@ async function vPlaces(){
     }
   };
 }
+// ═══ نظرة عامة ═══
+async function vHome(){
+  const c=sb;
+  const [pl,sub,rep,vt] = await Promise.all([
+    c.from('places').select('id,name_ar,city,effective_safety_status,override_safety_status,safe_experience_pct,safety_votes_count,dishes_count'),
+    c.from('place_submissions').select('id').eq('status','pending'),
+    c.from('reports').select('id').eq('status','open'),
+    c.from('votes').select('id')
+  ]);
+  const P=pl.data||[];
+  const cnt=s=>P.filter(x=>x.effective_safety_status===s).length;
+  const tot=P.length||1;
+  const dishes=P.reduce((a,x)=>a+(x.dishes_count||0),0);
+  const exp=P.reduce((a,x)=>a+(x.safety_votes_count||0),0);
+  const ov=P.filter(x=>x.override_safety_status);
+  const K=[['أماكن منشورة',P.length,'var(--green)','var(--greenLt)'],
+    ['مساهمات تنتظر',(sub.data||[]).length,'var(--amber)','var(--amberLt)'],
+    ['تجارب أمان',exp,'var(--green)','var(--greenLt)'],
+    ['بلاغات مفتوحة',(rep.data||[]).length,'var(--red)','var(--redLt)']];
+  const D=[['آمن للسيلياك',cnt('SEPARATE_PREP'),'var(--green)'],
+    ['تحقّق قبل الطلب',cnt('SHARED_PREP'),'var(--amber)'],
+    ['غير معروف',cnt('UNKNOWN'),'var(--grey)']];
+  $('#view').innerHTML=`
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin-bottom:20px">
+    ${K.map(k=>`<div class="card" style="padding:16px">
+      <div style="width:32px;height:32px;border-radius:10px;background:${k[3]};margin-bottom:10px"></div>
+      <b style="font-size:26px;color:${k[2]};display:block">${k[1]}</b>
+      <span class="muted">${k[0]}</span></div>`).join('')}
+  </div>
+  <div class="grid">
+    <div class="card"><b>تجاوزات يدوية سارية</b>
+      <p class="muted" style="margin:4px 0 14px">تصنيفات أوقفها مشرف عن الحساب التلقائي</p>
+      ${ov.length?ov.map(x=>`<div class="row" style="padding:10px 0;border-top:1px solid var(--border)">
+        <span class="pill" style="color:var(--amber);background:var(--amberLt)">مقفل</span>
+        <div style="flex:1"><b style="font-size:13px">${esc(x.name_ar)}</b>
+        <div class="muted">${esc(x.city)}</div></div></div>`).join('')
+        :'<p class="muted">لا توجد تجاوزات — كل التصنيفات محسوبة تلقائياً ✓</p>'}
+    </div>
+    <div class="card"><b>توزيع تصنيف الأمان</b>
+      <p class="muted" style="margin:4px 0 16px">${P.length} مكاناً · ${dishes} طبقاً</p>
+      ${D.map(d=>`<div style="margin-bottom:16px">
+        <div class="row" style="margin-bottom:6px"><span style="font-size:12.5px">${d[0]}</span>
+        <div class="sp"></div><b style="color:${d[2]};font-size:12.5px">${d[1]} مكان</b></div>
+        <div style="height:9px;background:var(--bg);border-radius:5px;overflow:hidden">
+        <div style="height:100%;width:${Math.round(d[1]/tot*100)}%;background:${d[2]};
+          border-radius:5px;margin-right:auto"></div></div></div>`).join('')}
+    </div>
+  </div>`;
+}
 
-sb.auth.getSession().then(({data})=>{ if(data.session) boot(); });
-</script>
-</body>
-</html>
+// ═══ البلاغات والمستخدمون ═══
+async function vMod(){
+  const [rp,us] = await Promise.all([
+    sb.from('reports').select('*,places(name_ar)').eq('status','open').order('created_at',{ascending:false}),
+    sb.from('profiles').select('id,full_name,city,is_celiac,role,is_banned,trust_score').order('trust_score',{ascending:false})
+  ]);
+  const R=rp.data||[], U=us.data||[];
+  $('#view').innerHTML=`
+  <div class="card" style="margin-bottom:20px">
+    <b>بلاغات تنتظر المراجعة (${R.length})</b>
+    <p class="muted" style="margin:4px 0 14px">البلاغات الصحية لها أولوية</p>
+    ${R.length?R.map(r=>`<div style="padding:14px 0;border-top:1px solid var(--border)">
+      <div class="row" style="flex-wrap:wrap;margin-bottom:8px">
+        <span class="pill" style="color:var(--red);background:var(--redLt)">${esc(r.reason)}</span>
+        <span class="muted">${esc(r.places?.name_ar||'—')} · ${esc(r.target_type)}</span></div>
+      <div style="font-size:13px;margin-bottom:10px">${esc(r.detail||'')}</div>
+      <div class="row" style="flex-wrap:wrap">
+        <button class="btn dgr rd" data-id="${r.id}">حذف المحتوى</button>
+        <button class="btn sec ri" data-id="${r.id}">تجاهل البلاغ</button></div>
+    </div>`).join('')
+      :'<p class="muted">لا توجد بلاغات مفتوحة ✓</p>'}
+  </div>
+  <div class="card"><b>المستخدمون (${U.length})</b>
+    <p class="muted" style="margin:4px 0 14px">${U.filter(u=>u.is_celiac).length} منهم مرضى سيلياك — أصواتهم بوزن مضاعف</p>
+    <table><thead><tr><th>المستخدم</th><th>المدينة</th><th>سيلياك</th>
+    <th>الثقة</th><th>الدور</th><th>الحالة</th><th>إجراء</th></tr></thead><tbody>
+    ${U.map(u=>`<tr>
+      <td><b>${esc(u.full_name||'مستخدم')}</b></td>
+      <td>${esc(u.city||'—')}</td>
+      <td>${u.is_celiac?'<span class="pill" style="color:var(--green);background:var(--greenLt)">نعم</span>':'<span class="muted">—</span>'}</td>
+      <td><b>${u.trust_score}</b></td>
+      <td>${u.role==='admin'?'مدير':u.role==='moderator'?'مشرف':'مستخدم'}</td>
+      <td>${u.is_banned?'<span class="pill" style="color:var(--red);background:var(--redLt)">محظور</span>'
+        :'<span class="pill" style="color:var(--green);background:var(--greenLt)">نشط</span>'}</td>
+      <td>${u.role==='admin'?'<span class="muted">—</span>':
+        `<button class="btn ${u.is_banned?'sec':'dgr'} ub" data-id="${u.id}" data-b="${u.is_banned}">
+        ${u.is_banned?'رفع الحظر':'حظر'}</button>`}</td></tr>`).join('')}
+    </tbody></table></div>`;
+  $('#view').onclick = async e => {
+    const d=e.target.closest('.rd'), i=e.target.closest('.ri'), b=e.target.closest('.ub');
+    const me=(await sb.auth.getUser()).data.user.id;
+    if(d && confirm('حذف المحتوى المبلَّغ عنه وإغلاق البلاغ؟')){
+      await sb.from('reports').update({status:'resolved',resolution:'حُذف المحتوى',
+        resolved_by:me,resolved_at:new Date().toISOString()}).eq('id',d.dataset.id); vMod(); }
+    if(i){ await sb.from('reports').update({status:'ignored',resolution:'بلاغ غير صحيح',
+      resolved_by:me,resolved_at:new Date().toISOString()}).eq('id',i.dataset.id); vMod(); }
+    if(b){ const ban=b.dataset.b!=='true';
+      if(!confirm(ban?'حظر هذا المستخدم؟':'رفع الحظر؟')) return;
+      const { error } = await sb.from('profiles').update({is_banned:ban}).eq('id',b.dataset.id);
+      if(error) alert(error.message);
+      vMod(); }
+  };
+}
+
