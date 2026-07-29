@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'core.dart';
 import 'screens/home.dart';
+import 'screens/account.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -45,7 +46,7 @@ class _ShellState extends State<Shell> {
         child: IndexedStack(index: _i, children: const [
           HomeScreen(),
           _Soon('الخريطة'),
-          _Soon('حسابي'),
+          AccountScreen(),
           _Soon('عن التطبيق'),
         ]),
       ),
