@@ -266,8 +266,278 @@ function editor(k,v){
   };
   $('#pub').onclick=()=>save('published');
   $('#drf').onclick=()=>save('draft');
+}async function vBanners(){
+  const { data:bs } = await sb.from('banners').select('*,places(name_ar)').order('sort_order');
+  const { data:pl } = await sb.from('places').select('id,name_ar').order('name_ar');
+  $('#view').innerHTML=`<div class="grid"><div>
+    <div class="card" style="margin-bottom:20px"><b>البنرات في الشريط المتحرك</b>
+    <p class="muted" style="margin:4px 0 14px">تتناوب أعلى الشاشة الرئيسية كل ٥ ثوانٍ</p>
+    ${(bs||[]).length?(bs||[]).map((b,i)=>`<div class="row" style="padding:12px 0;
+      border-top:${i?'1px solid var(--border)':'none'};flex-wrap:wrap">
+      <img class="thumb" src="${esc(b.image_url)}" alt="">
+      <div style="flex:1;min-width:120px"><b style="font-size:13px">${esc(b.title_ar||'بلا عنوان')}</b>
+      <div class="muted">${esc(b.places?.name_ar||'—')} · ترتيب ${b.sort_order}</div>
+      <div class="muted">${b.impressions} ظهور · ${b.clicks} نقرة</div></div>
+      <button class="btn sec bt" data-id="${b.id}" data-a="${b.is_active}">${b.is_active?'إيقاف':'تفعيل'}</button>
+      <button class="btn dgr bd" data-id="${b.id}">حذف</button></div>`).join('')
+      :'<p class="muted">لا توجد بنرات بعد</p>'}</div>
+    <div class="card"><b>رفع بنر جديد</b>
+      <div class="drop" style="margin:14px 0" id="dz">اضغط لاختيار صورة الإعلان<br>
+      <span style="font-weight:400;color:var(--grey)">PNG أو JPG · ١٠٥٠×٣٩٦ · حتى ٢ ميجابايت</span></div>
+      <input type="file" id="fl" accept="image/*" hidden>
+      <img id="pv" style="width:100%;border-radius:10px;display:none;margin-bottom:12px">
+      <label class="muted">عنوان البنر</label><input id="bt" placeholder="تجربة أرمنية فاخرة وآمنة">
+      <label class="muted" style="display:block;margin-top:10px">المطعم المرتبط</label>
+      <select id="bp"><option value="">— بلا ربط —</option>
+      ${(pl||[]).map(p=>`<option value="${p.id}">${esc(p.name_ar)}</option>`).join('')}</select>
+      <label class="muted" style="display:block;margin-top:10px">الترتيب</label>
+      <input id="bo" type="number" value="${(bs||[]).length+1}">
+      <button class="btn" id="bup" style="width:100%;margin-top:14px">رفع ونشر</button>
+      <p id="bmsg" style="font-size:12px;margin-top:10px"></p></div></div>
+    <div class="card"><b>مواصفات ملف الإعلان</b>
+      <p class="muted" style="margin:4px 0 12px">أرسلها للمطعم</p>
+      <div class="spec"><b>١٠٥٠ × ٣٩٦ بكسل</b><span>النسبة ٢٫٦٥ : ١ · دقة @3x</span></div>
+      <div class="sl"><span class="muted">الصيغة</span><b>PNG أو JPG</b></div>
+      <div class="sl"><span class="muted">الحجم الأقصى</span><b>٢ ميجابايت</b></div>
+      <div class="sl"><span class="muted">المنطقة الآمنة</span><b>٤٠ بكسل من كل جهة</b></div>
+      <div class="sl"><span class="muted">أصغر خط</span><b>٢٤ بكسل</b></div>
+      <div class="sl"><span class="muted">العرض في التطبيق</span><b>٣٥٠ × ١٣٢ نقطة</b></div></div></div>`;
+  $('#dz').onclick=()=>$('#fl').click();
+  $('#fl').onchange=e=>{const f=e.target.files[0]; if(!f) return;
+    $('#pv').src=window.URL.createObjectURL(f); $('#pv').style.display='block';};
+  const bm=(t,c)=>{const x=$('#bmsg');x.textContent=t;x.style.color=c;};
+  $('#bup').onclick = async () => {
+    const f=$('#fl').files[0];
+    if(!f) return bm('اختر صورة أولاً','var(--red)');
+    if(f.size>2097152) return bm('الحجم أكبر من ٢ ميجابايت','var(--red)');
+    bm('جارِ الرفع…','var(--grey)');
+    const name=Date.now()+'_'+f.name.replace(/[^\w.]/g,'_');
+    const up=await sb.storage.from('banners').upload(name,f);
+    if(up.error) return bm(up.error.message,'var(--red)');
+    const url=sb.storage.from('banners').getPublicUrl(name).data.publicUrl;
+    const { error } = await sb.from('banners').insert({
+      title_ar:$('#bt').value.trim()||null, place_id:$('#bp').value||null,
+      image_url:url, image_width:1050, image_height:396,
+      link_type:$('#bp').value?'place':'none', link_value:$('#bp').value||null,
+      sort_order:+$('#bo').value||1, is_active:true,
+      created_by:(await sb.auth.getUser()).data.user.id });
+    if(error) return bm(error.message,'var(--red)');
+    bm('✓ رُفع ونُشر','var(--green)'); setTimeout(vBanners,800);
+  };
+  $('#view').onclick = async e => {
+    const t=e.target.closest('.bt'), d=e.target.closest('.bd');
+    if(t){ await sb.from('banners').update({is_active:t.dataset.a!=='true'}).eq('id',t.dataset.id); vBanners(); }
+    if(d && confirm('حذف هذا البنر نهائياً؟')){
+      await sb.from('banners').delete().eq('id',d.dataset.id); vBanners(); }
+  };
 }
+
+async function vSubs(){
+  const { data:s } = await sb.from('place_submissions').select('*')
+    .eq('status','pending').order('created_at',{ascending:false});
+  const LV={SEPARATE_PREP:['آمن','var(--green)','var(--greenLt)'],
+    SHARED_PREP:['مشتركة','var(--amber)','var(--amberLt)'],
+    UNKNOWN:['غير معروف','var(--grey)','var(--bg)']};
+  $('#view').innerHTML=`<div class="card"><b>مساهمات تنتظر المراجعة (${(s||[]).length})</b>
+    <table style="margin-top:14px"><thead><tr><th>المكان</th><th>المدينة</th><th>النوع</th>
+    <th>التصنيف</th><th>الأطباق</th><th>الإجراء</th></tr></thead><tbody>
+    ${(s||[]).map(r=>{const l=LV[r.claimed_safety];return `<tr>
+      <td><b>${esc(r.name)}</b><div class="muted">${esc(r.note||'')}</div></td>
+      <td>${esc(r.city)}</td><td>${esc(r.place_type)}</td>
+      <td><span class="pill" style="color:${l[1]};background:${l[2]}">${l[0]}</span></td>
+      <td class="muted">${esc((r.suggested_dishes||[]).join('، '))}</td>
+      <td><button class="btn ap" data-id="${r.id}">اعتماد</button>
+      <button class="btn dgr rj" data-id="${r.id}">رفض</button></td></tr>`;}).join('')
+      ||'<tr><td colspan="6" class="muted">لا توجد مساهمات معلّقة</td></tr>'}
+    </tbody></table></div>`;
+  $('#view').onclick = async e => {
+    const a=e.target.closest('.ap'), r=e.target.closest('.rj');
+    if(!a && !r) return;
+    const me=(await sb.auth.getUser()).data.user.id;
+    if(a){ await sb.from('place_submissions').update({status:'published',
+      reviewed_by:me,reviewed_at:new Date().toISOString()}).eq('id',a.dataset.id); vSubs(); }
+    if(r){ const why=prompt('سبب الرفض؟'); if(!why) return;
+      await sb.from('place_submissions').update({status:'rejected',review_note:why,
+        reviewed_by:me,reviewed_at:new Date().toISOString()}).eq('id',r.dataset.id); vSubs(); }
+  };
+}
+
+async function vPlaces(){
+  const { data:p } = await sb.from('places')
+    .select('id,name_ar,city,computed_safety_status,override_safety_status,override_reason,safe_experience_pct,safety_votes_count')
+    .order('safety_votes_count',{ascending:false});
+  const N={SEPARATE_PREP:['آمن للسيلياك','var(--green)','var(--greenLt)'],
+    SHARED_PREP:['تحقّق قبل الطلب','var(--amber)','var(--amberLt)'],
+    UNKNOWN:['غير معروف','var(--grey)','var(--bg)']};
+  $('#view').innerHTML=`<div class="card"><b>الأماكن</b>
+    <p class="muted" style="margin:4px 0 14px">التجاوز اليدوي يُقفل التصنيف ويستوجب سبباً</p>
+    <table><thead><tr><th>المكان</th><th>المدينة</th><th>محسوب تلقائياً</th>
+    <th>تجاوز يدوي</th><th>تجارب الأمان</th><th>الإجراء</th></tr></thead><tbody>
+    ${(p||[]).map(x=>{const c=N[x.computed_safety_status],
+      o=x.override_safety_status?N[x.override_safety_status]:null;
+      return `<tr><td><b>${esc(x.name_ar)}</b></td><td>${esc(x.city)}</td>
+      <td><span class="pill" style="color:${c[1]};background:${c[2]}">${c[0]}</span></td>
+      <td>${o?`<span class="pill" style="color:${o[1]};background:${o[2]}">${o[0]}</span>
+        <div class="muted">${esc(x.override_reason||'')}</div>`:'<span class="muted">—</span>'}</td>
+      <td>${x.safe_experience_pct?x.safe_experience_pct+'٪ · '+x.safety_votes_count:'—'}</td>
+      <td>${o?`<button class="btn sec clr" data-id="${x.id}">إلغاء التجاوز</button>`
+        :`<button class="btn sec ovr" data-id="${x.id}">تجاوز</button>`}</td></tr>`;}).join('')}
+    </tbody></table></div>`;
+  $('#view').onclick = async e => {
+    const o=e.target.closest('.ovr'), c=e.target.closest('.clr');
+    if(o){
+      const v=prompt('التصنيف الجديد:\n1 = آمن للسيلياك\n2 = تحقّق قبل الطلب\n3 = غير معروف');
+      const map={'1':'SEPARATE_PREP','2':'SHARED_PREP','3':'UNKNOWN'};
+      if(!map[v]) return;
+      const why=prompt('سبب التجاوز (إلزامي):');
+      if(!why||!why.trim()) return alert('السبب إلزامي');
+      const { error } = await sb.from('places').update({override_safety_status:map[v],
+        override_reason:why.trim(), override_by:(await sb.auth.getUser()).data.user.id })
+        .eq('id',o.dataset.id);
+      if(error) alert(error.message);
+      vPlaces();
+    }
+    if(c && confirm('إرجاع التصنيف للحساب التلقائي؟')){
+      await sb.from('places').update({override_safety_status:null,override_reason:null,
+        override_by:null,override_at:null}).eq('id',c.dataset.id);
+      vPlaces();
+    }
+  };
+}
+
+async function vMod(){
+  const [rp,us] = await Promise.all([
+    sb.from('reports').select('*,places(name_ar)').eq('status','open').order('created_at',{ascending:false}),
+    sb.from('profiles').select('id,full_name,city,is_celiac,role,is_banned,trust_score').order('trust_score',{ascending:false})]);
+  const R=rp.data||[], U=us.data||[];
+  $('#view').innerHTML=`
+  <div class="card" style="margin-bottom:20px"><b>بلاغات تنتظر المراجعة (${R.length})</b>
+    <p class="muted" style="margin:4px 0 14px">البلاغات الصحية لها أولوية</p>
+    ${R.length?R.map(r=>`<div style="padding:14px 0;border-top:1px solid var(--border)">
+      <div class="row" style="flex-wrap:wrap;margin-bottom:8px">
+        <span class="pill" style="color:var(--red);background:var(--redLt)">${esc(r.reason)}</span>
+        <span class="muted">${esc(r.places?.name_ar||'—')} · ${esc(r.target_type)}</span></div>
+      <div style="font-size:13px;margin-bottom:10px">${esc(r.detail||'')}</div>
+      <div class="row" style="flex-wrap:wrap">
+        <button class="btn dgr rd" data-id="${r.id}">حذف المحتوى</button>
+        <button class="btn sec ri" data-id="${r.id}">تجاهل البلاغ</button></div></div>`).join('')
+      :'<p class="muted">لا توجد بلاغات مفتوحة ✓</p>'}</div>
+  <div class="card"><b>المستخدمون (${U.length})</b>
+    <p class="muted" style="margin:4px 0 14px">${U.filter(u=>u.is_celiac).length} منهم مرضى سيلياك — أصواتهم بوزن مضاعف</p>
+    <table><thead><tr><th>المستخدم</th><th>المدينة</th><th>سيلياك</th>
+    <th>الثقة</th><th>الدور</th><th>الحالة</th><th>إجراء</th></tr></thead><tbody>
+    ${U.map(u=>`<tr>
+      <td><b>${esc(u.full_name||'مستخدم')}</b></td>
+      <td>${esc(u.city||'—')}</td>
+      <td>${u.is_celiac?'<span class="pill" style="color:var(--green);background:var(--greenLt)">نعم</span>':'<span class="muted">—</span>'}</td>
+      <td><b>${u.trust_score}</b></td>
+      <td>${u.role==='admin'?'مدير':u.role==='moderator'?'مشرف':'مستخدم'}</td>
+      <td>${u.is_banned?'<span class="pill" style="color:var(--red);background:var(--redLt)">محظور</span>'
+        :'<span class="pill" style="color:var(--green);background:var(--greenLt)">نشط</span>'}</td>
+      <td>${u.role==='admin'?'<span class="muted">—</span>':
+        `<button class="btn ${u.is_banned?'sec':'dgr'} ub" data-id="${u.id}" data-b="${u.is_banned}">
+        ${u.is_banned?'رفع الحظر':'حظر'}</button>`}</td></tr>`).join('')}
+    </tbody></table></div>`;
+  $('#view').onclick = async e => {
+    const d=e.target.closest('.rd'), i=e.target.closest('.ri'), b=e.target.closest('.ub');
+    if(!d && !i && !b) return;
+    const me=(await sb.auth.getUser()).data.user.id;
+    if(d && confirm('حذف المحتوى المبلَّغ عنه وإغلاق البلاغ؟')){
+      await sb.from('reports').update({status:'resolved',resolution:'حُذف المحتوى',
+        resolved_by:me,resolved_at:new Date().toISOString()}).eq('id',d.dataset.id); vMod(); }
+    if(i){ await sb.from('reports').update({status:'ignored',resolution:'بلاغ غير صحيح',
+      resolved_by:me,resolved_at:new Date().toISOString()}).eq('id',i.dataset.id); vMod(); }
+    if(b){ const ban=b.dataset.b!=='true';
+      if(!confirm(ban?'حظر هذا المستخدم؟':'رفع الحظر؟')) return;
+      const { error } = await sb.from('profiles').update({is_banned:ban}).eq('id',b.dataset.id);
+      if(error) alert(error.message);
+      vMod(); }
+  };
+}
+
+async function vNotif(){
+  const [cp,pl,us] = await Promise.all([
+    sb.from('notification_campaigns').select('*').order('created_at',{ascending:false}),
+    sb.from('places').select('id,name_ar').order('name_ar'),
+    sb.from('profiles').select('id,is_celiac')]);
+  const C=cp.data||[], P=pl.data||[], U=us.data||[];
+  const ST={draft:['مسودة','var(--grey)','var(--bg)'],
+    scheduled:['مجدولة','var(--amber)','var(--amberLt)'],
+    sent:['مُرسلة','var(--green)','var(--greenLt)'],
+    cancelled:['ملغاة','var(--red)','var(--redLt)']};
+  $('#view').innerHTML=`
+  <div class="warn" style="background:var(--amberLt);color:var(--amber)">
+    ⏳ خدمة الإرسال (FCM) لم تُفعّل بعد — تحتاج مفتاح APNs من حساب آبل.
+    الحملات تُحفظ الآن كاملةً وتُرسل فور التفعيل.</div>
+  <div class="grid"><div>
+    <div class="card" style="margin-bottom:20px"><b>حملة إشعار جديدة</b>
+      <p class="muted" style="margin:4px 0 14px">تصل أجهزة المستخدمين المطابقين</p>
+      <label class="muted">عنوان الإشعار</label>
+      <input id="nt" placeholder="جرّب قائمة لوسين الجديدة">
+      <label class="muted" style="display:block;margin-top:12px">نص الإشعار</label>
+      <textarea id="nb" placeholder="مطعم لوسين أضاف ٦ أطباق آمنة معتمدة..."></textarea>
+      <label class="muted" style="display:block;margin-top:12px">الجمهور المستهدف</label>
+      <select id="na">
+        <option value="all">الجميع (${U.length})</option>
+        <option value="celiac_only">مرضى السيلياك فقط (${U.filter(u=>u.is_celiac).length})</option>
+        <option value="city">حسب المدينة</option>
+        <option value="saved_place">من حفظوا مكاناً معيّناً</option></select>
+      <label class="muted" style="display:block;margin-top:12px">الوجهة عند الضغط</label>
+      <select id="nd"><option value="none">لا شيء</option>
+        ${P.map(p=>`<option value="${p.id}">صفحة — ${esc(p.name_ar)}</option>`).join('')}</select>
+      <div class="row" style="margin-top:16px;flex-wrap:wrap">
+        <button class="btn" id="nsave">حفظ الحملة</button>
+        <button class="btn sec" disabled>إرسال — معطّل</button></div>
+      <p id="nmsg" style="font-size:12px;margin-top:10px"></p></div>
+    <div class="card"><b>الحملات (${C.length})</b>
+      <table style="margin-top:12px"><thead><tr><th>العنوان</th><th>الجمهور</th>
+      <th>الوصول المقدّر</th><th>الحالة</th><th></th></tr></thead><tbody>
+      ${C.map(x=>{const s=ST[x.status]||ST.draft;return `<tr>
+        <td><b>${esc(x.title_ar)}</b><div class="muted">${esc(x.body_ar).slice(0,50)}…</div></td>
+        <td class="muted">${x.audience_type==='celiac_only'?'سيلياك':x.audience_type==='all'?'الجميع':esc(x.audience_type)}</td>
+        <td>${x.estimated_reach}</td>
+        <td><span class="pill" style="color:${s[1]};background:${s[2]}">${s[0]}</span></td>
+        <td><button class="btn dgr cdel" data-id="${x.id}">حذف</button></td></tr>`;}).join('')
+        ||'<tr><td colspan="5" class="muted">لا توجد حملات بعد</td></tr>'}
+      </tbody></table></div></div>
+  <div class="card"><b>الإشعارات التلقائية</b>
+    <p class="muted" style="margin:4px 0 14px">يرسلها النظام بلا تدخل</p>
+    ${[['تغيّر تصنيف مكان محفوظ','تنبيه صحي — لا يمكن للمستخدم إيقافه',true],
+       ['قبول مكان أضافه المستخدم','',false],
+       ['رفض مكان مع بيان السبب','',false],
+       ['شكر عند بلوغ عدد تصويتات','',false],
+       ['حملات تسويقية','بحد أقصى ٢ أسبوعياً',false]]
+      .map((a,i)=>`<div style="padding:12px 0;border-top:${i?'1px solid var(--border)':'none'}">
+      <b style="font-size:12.5px">${a[0]}</b>
+      ${a[1]?`<div style="font-size:11px;color:${a[2]?'var(--red)':'var(--grey)'};margin-top:3px">${a[1]}</div>`:''}
+      ${a[2]?'<div><span class="pill" style="color:var(--red);background:var(--redLt);margin-top:6px">مقفل دائماً</span></div>':''}
+      </div>`).join('')}</div></div>`;
+  const nm=(t,c)=>{const x=$('#nmsg');x.textContent=t;x.style.color=c;};
+  $('#nsave').onclick = async () => {
+    const t=$('#nt').value.trim(), b=$('#nb').value.trim();
+    if(!t||!b) return nm('اكتب العنوان والنص','var(--red)');
+    const aud=$('#na').value;
+    const reach = aud==='celiac_only' ? U.filter(u=>u.is_celiac).length : U.length;
+    const { error } = await sb.from('notification_campaigns').insert({
+      title_ar:t, body_ar:b, audience_type:aud,
+      deeplink_type:$('#nd').value==='none'?'none':'place',
+      deeplink_value:$('#nd').value==='none'?null:$('#nd').value,
+      status:'draft', estimated_reach:reach,
+      created_by:(await sb.auth.getUser()).data.user.id });
+    if(error) return nm(error.message,'var(--red)');
+    nm('✓ حُفظت الحملة — ستُرسل فور تفعيل FCM','var(--green)');
+    setTimeout(vNotif,900);
+  };
+  $('#view').onclick = async e => {
+    const d=e.target.closest('.cdel');
+    if(d && confirm('حذف هذه الحملة؟')){
+      await sb.from('notification_campaigns').delete().eq('id',d.dataset.id); vNotif(); }
+  };
+}
+
+sb.auth.getSession().then(({data})=>{ if(data.session) boot(); });
 </script>
 </body>
 </html>
+
 
