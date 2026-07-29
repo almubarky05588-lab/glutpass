@@ -118,7 +118,156 @@ tr.sel td{background:var(--greenLt)}
     <section id="view"></section>
   </main>
 </div>
+<script type="module">
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+const URL='https://sreabyhmxetaynqqhlwe.supabase.co';
+const KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNyZWFieWhteGV0YXlucXFobHdlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUyNzA3MjgsImV4cCI6MjEwMDg0NjcyOH0.a-5aEWl7FY9Q0CTK7AJVYvLCrW2MXNybfFFqh23xxN0';
+const sb = createClient(URL, KEY);
+const $ = s => document.querySelector(s);
+const esc = s => String(s??'').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
+const TABS = [['home','نظرة عامة'],['content','نصوص التطبيق'],['banners','البنرات'],
+  ['subs','المساهمات'],['places','الأماكن والأمان'],
+  ['mod','البلاغات والمستخدمون'],['notif','الإشعارات']];
+let tab='home';
+
+$('#go').onclick = async () => {
+  $('#lerr').textContent='';
+  const { error } = await sb.auth.signInWithPassword({
+    email:$('#em').value.trim(), password:$('#pw').value });
+  if (error) { $('#lerr').textContent = error.message || 'تعذّر الدخول'; return; }
+  boot();
+};
+$('#pw').onkeydown = e => { if(e.key==='Enter') $('#go').click(); };
+$('#out').onclick = async () => { await sb.auth.signOut(); location.reload(); };
+
+async function boot(){
+  const { data:{ user } } = await sb.auth.getUser();
+  if (!user) return;
+  const { data:p } = await sb.from('profiles').select('full_name,role').eq('id',user.id).maybeSingle();
+  if (!p || (p.role!=='admin' && p.role!=='moderator')) {
+    $('#lerr').textContent='هذا الحساب ليس مشرفاً.'; await sb.auth.signOut(); return; }
+  $('#login').hidden=true; $('#app').hidden=false;
+  $('#who').textContent=(p.full_name||'مشرف')+' · '+(p.role==='admin'?'مدير النظام':'مشرف');
+  $('#nav').innerHTML=TABS.map(t=>`<button data-t="${t[0]}" class="${t[0]===tab?'on':''}">${t[1]}</button>`).join('');
+  $('#nav').onclick = e => { const b=e.target.closest('button'); if(!b) return;
+    tab=b.dataset.t; [...$('#nav').children].forEach(x=>x.classList.toggle('on',x.dataset.t===tab)); render(); };
+  render();
+}
+function render(){
+  $('#ttl').textContent=TABS.find(t=>t[0]===tab)[1];
+  $('#view').innerHTML='<p class="muted">جارِ التحميل…</p>';
+  ({home:vHome,content:vContent,banners:vBanners,subs:vSubs,
+    places:vPlaces,mod:vMod,notif:vNotif})[tab]();
+}
+
+async function vHome(){
+  const [pl,sub,rep] = await Promise.all([
+    sb.from('places').select('id,name_ar,city,effective_safety_status,override_safety_status,safety_votes_count,dishes_count'),
+    sb.from('place_submissions').select('id').eq('status','pending'),
+    sb.from('reports').select('id').eq('status','open')]);
+  const P=pl.data||[], tot=P.length||1;
+  const cnt=s=>P.filter(x=>x.effective_safety_status===s).length;
+  const dishes=P.reduce((a,x)=>a+(x.dishes_count||0),0);
+  const exp=P.reduce((a,x)=>a+(x.safety_votes_count||0),0);
+  const ov=P.filter(x=>x.override_safety_status);
+  const K=[['أماكن منشورة',P.length,'var(--green)','var(--greenLt)'],
+    ['مساهمات تنتظر',(sub.data||[]).length,'var(--amber)','var(--amberLt)'],
+    ['تجارب أمان',exp,'var(--green)','var(--greenLt)'],
+    ['بلاغات مفتوحة',(rep.data||[]).length,'var(--red)','var(--redLt)']];
+  const D=[['آمن للسيلياك',cnt('SEPARATE_PREP'),'var(--green)'],
+    ['تحقّق قبل الطلب',cnt('SHARED_PREP'),'var(--amber)'],
+    ['غير معروف',cnt('UNKNOWN'),'var(--grey)']];
+  $('#view').innerHTML=`
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin-bottom:20px">
+    ${K.map(k=>`<div class="card" style="padding:16px">
+      <div style="width:32px;height:32px;border-radius:10px;background:${k[3]};margin-bottom:10px"></div>
+      <b style="font-size:26px;color:${k[2]};display:block">${k[1]}</b>
+      <span class="muted">${k[0]}</span></div>`).join('')}</div>
+  <div class="grid">
+    <div class="card"><b>تجاوزات يدوية سارية</b>
+      <p class="muted" style="margin:4px 0 14px">تصنيفات أوقفها مشرف عن الحساب التلقائي</p>
+      ${ov.length?ov.map(x=>`<div class="row" style="padding:10px 0;border-top:1px solid var(--border)">
+        <span class="pill" style="color:var(--amber);background:var(--amberLt)">مقفل</span>
+        <div style="flex:1"><b style="font-size:13px">${esc(x.name_ar)}</b>
+        <div class="muted">${esc(x.city)}</div></div></div>`).join('')
+        :'<p class="muted">لا توجد تجاوزات — كل التصنيفات محسوبة تلقائياً ✓</p>'}</div>
+    <div class="card"><b>توزيع تصنيف الأمان</b>
+      <p class="muted" style="margin:4px 0 16px">${P.length} مكاناً · ${dishes} طبقاً</p>
+      ${D.map(d=>`<div style="margin-bottom:16px">
+        <div class="row" style="margin-bottom:6px"><span style="font-size:12.5px">${d[0]}</span>
+        <div class="sp"></div><b style="color:${d[2]};font-size:12.5px">${d[1]} مكان</b></div>
+        <div style="height:9px;background:var(--bg);border-radius:5px;overflow:hidden">
+        <div style="height:100%;width:${Math.round(d[1]/tot*100)}%;background:${d[2]};
+          border-radius:5px;margin-right:auto"></div></div></div>`).join('')}</div>
+  </div>`;
+}
+
+let curKey=null;
+async function vContent(){
+  const { data:keys } = await sb.from('content_keys')
+    .select('key,screen,description,tier,is_safety_critical').order('tier').order('key');
+  const { data:vals } = await sb.from('content_values')
+    .select('key,value,version,status').eq('status','published');
+  const cur={}; for(const v of (vals||[])) cur[v.key]=v;
+  const TC={A:['أ','var(--green)','var(--greenLt)'],B:['ب','var(--red)','var(--redLt)'],
+    C:['ج','var(--blue)','var(--blueLt)']};
+  $('#view').innerHTML=`<div class="grid">
+    <div class="card"><table><thead><tr><th>المفتاح</th><th>الشاشة</th>
+    <th>النص المنشور</th><th>الطبقة</th></tr></thead><tbody>
+    ${(keys||[]).map(k=>{const t=TC[k.tier];return `<tr data-k="${esc(k.key)}" style="cursor:pointer"
+      class="${k.key===curKey?'sel':''}">
+      <td><b style="font-size:12px">${esc(k.key)}</b></td>
+      <td class="muted">${esc(k.screen)}</td>
+      <td>${esc(cur[k.key]?.value||'—')}</td>
+      <td><span class="pill" style="color:${t[1]};background:${t[2]}">${t[0]}</span>
+      ${k.is_safety_critical?'<span class="pill" style="color:var(--red)">حرج</span>':''}</td></tr>`;}).join('')}
+    </tbody></table></div>
+    <div id="ed" class="card"><p class="muted">اختر مفتاحاً من الجدول لتحريره</p></div></div>`;
+  $('#view').querySelector('tbody').onclick = e => {
+    const tr=e.target.closest('tr'); if(!tr) return;
+    curKey=tr.dataset.k;
+    [...tr.parentNode.children].forEach(x=>x.classList.toggle('sel',x.dataset.k===curKey));
+    editor(keys.find(k=>k.key===curKey),cur[curKey]);
+    $('#ed').scrollIntoView({behavior:'smooth'});
+  };
+  if(curKey){const k=keys.find(x=>x.key===curKey); if(k) editor(k,cur[curKey]);}
+}
+function editor(k,v){
+  const crit=k.is_safety_critical;
+  $('#ed').innerHTML=`<b style="font-size:14px">${esc(k.key)}</b>
+    <p class="muted" style="margin:4px 0 10px">${esc(k.description||'')}</p>
+    ${crit?`<div class="warn">⚠ نص حرج للسلامة — تغييره يبدّل معنى تحذير صحي في التطبيق كله.
+      يُسجَّل التعديل باسمك، والسبب إلزامي.</div>`:''}
+    <label class="muted">النص المنشور حالياً</label>
+    <div style="background:var(--bg);border:1px solid var(--border);border-radius:9px;
+      padding:10px;margin:6px 0 14px;font-size:13px">${esc(v?.value||'— لا يوجد —')}</div>
+    <label class="muted">النص الجديد</label>
+    <textarea id="nv">${esc(v?.value||'')}</textarea>
+    <label class="muted" style="display:block;margin-top:12px">سبب التغيير
+      ${crit?'<span style="color:var(--red)">· إلزامي</span>':'(اختياري)'}</label>
+    <input id="nn" placeholder="اشرح سبب التعديل...">
+    <div class="row" style="margin-top:16px">
+      <button class="btn" id="pub">نشر للتطبيق</button>
+      <button class="btn sec" id="drf">حفظ كمسودة</button></div>
+    <p id="cmsg" style="font-size:12px;margin-top:10px"></p>`;
+  const msg=(t,c)=>{const e=$('#cmsg');e.textContent=t;e.style.color=c;};
+  const save = async st => {
+    const val=$('#nv').value.trim(), note=$('#nn').value.trim();
+    if(!val) return msg('اكتب النص أولاً','var(--red)');
+    if(crit && !note) return msg('السبب إلزامي للنصوص الحرجة','var(--red)');
+    const { error } = await sb.from('content_values').insert({
+      key:k.key, locale:'ar', value:val, version:(v?.version||0)+1,
+      status:st, change_note:note||null,
+      updated_by:(await sb.auth.getUser()).data.user.id });
+    if(error) return msg(error.message,'var(--red)');
+    msg(st==='published'?'✓ نُشر':'✓ حُفظ كمسودة','var(--green)');
+    setTimeout(vContent,900);
+  };
+  $('#pub').onclick=()=>save('published');
+  $('#drf').onclick=()=>save('draft');
+}
+</script>
 </body>
 </html>
 
