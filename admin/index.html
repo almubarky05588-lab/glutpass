@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>GlutPass — لوحة التحكم</title>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --green:#146C43; --greenLt:#E8F3E4; --dark:#152018; --grey:#9AA79E;
+  --border:#E5EAE5; --bg:#F4F6F4; --amber:#C2770F; --amberLt:#FDF0E0;
+  --red:#C0392B; --redLt:#FCE7E4; --blue:#2A5A99; --blueLt:#E6EDF7;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Tajawal,sans-serif;background:var(--bg);color:var(--dark)}
+button{font-family:inherit;cursor:pointer;border:none}
+input,textarea,select{font-family:inherit;width:100%;padding:10px 12px;
+  border:1px solid var(--border);border-radius:9px;background:#fff;
+  font-size:14px;color:var(--dark)}
+textarea{resize:vertical;min-height:70px;line-height:1.7}
+.btn{padding:10px 18px;border-radius:9px;font-size:13px;font-weight:700;
+  background:var(--green);color:#fff}
+.btn.sec{background:#fff;color:var(--dark);border:1px solid var(--border)}
+.btn.dgr{background:var(--redLt);color:var(--red)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.pill{display:inline-block;padding:4px 11px;border-radius:12px;
+  font-size:11px;font-weight:700}
+.card{background:#fff;border:1px solid var(--border);border-radius:16px;padding:20px}
+.muted{color:var(--grey);font-size:12px}
+.row{display:flex;align-items:center;gap:10px}
+.sp{flex:1}
+
+/* تسجيل الدخول */
+#login{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+#login .card{width:100%;max-width:380px;text-align:center}
+#login h1{font-size:22px;margin:14px 0 4px}
+#login .f{text-align:right;margin-top:14px}
+#login label{font-size:12px;color:var(--grey);display:block;margin-bottom:5px}
+.logo{width:52px;height:52px;border-radius:16px;background:var(--green);
+  margin:0 auto;display:flex;align-items:center;justify-content:center;
+  color:#fff;font-size:24px;font-weight:700}
+
+/* الهيكل */
+#app{display:flex;min-height:100vh}
+aside{width:250px;background:#fff;border-left:1px solid var(--border);
+  padding:22px 16px;position:sticky;top:0;height:100vh;flex-shrink:0}
+aside .brand{display:flex;align-items:center;gap:10px;margin-bottom:26px}
+aside .brand .logo{width:38px;height:38px;border-radius:12px;font-size:17px}
+aside .brand b{font-size:16px;display:block}
+nav button{display:block;width:100%;text-align:right;padding:11px 14px;
+  border-radius:10px;background:none;font-size:13.5px;color:var(--dark);margin-bottom:4px}
+nav button.on{background:var(--greenLt);color:var(--green);font-weight:700}
+aside .out{position:absolute;bottom:22px;right:16px;left:16px}
+main{flex:1;min-width:0}
+header{background:#fff;border-bottom:1px solid var(--border);
+  padding:18px 28px;display:flex;align-items:center;gap:12px}
+header h2{font-size:19px}
+#view{padding:24px 28px}
+
+/* جداول */
+table{width:100%;border-collapse:collapse}
+th{font-size:11px;color:var(--grey);text-align:right;padding:0 8px 10px;font-weight:700}
+td{padding:12px 8px;border-top:1px solid var(--border);font-size:13px;vertical-align:middle}
+tr.sel td{background:var(--greenLt)}
+.grid{display:grid;grid-template-columns:1fr 380px;gap:20px;align-items:start}
+@media(max-width:900px){
+  .grid{grid-template-columns:1fr}
+  aside{width:64px;padding:16px 8px}
+  aside .brand b,aside .brand span,nav button span{display:none}
+  #view{padding:16px}
+}
+.warn{background:var(--redLt);color:var(--red);padding:12px;border-radius:11px;
+  font-size:12px;line-height:1.7;margin:12px 0}
+.ok{background:var(--greenLt);color:var(--green);padding:12px;border-radius:11px;
+  font-size:12.5px;margin:12px 0}
+.drop{border:2px dashed var(--green);background:var(--bg);border-radius:12px;
+  padding:26px;text-align:center;color:var(--green);font-size:13px;font-weight:700}
+.thumb{width:132px;height:50px;border-radius:8px;object-fit:cover;background:var(--bg)}
+.spec{background:var(--greenLt);border-radius:12px;padding:16px;text-align:center;margin-bottom:14px}
+.spec b{font-size:20px;color:var(--green);display:block}
+.spec span{font-size:11.5px;color:var(--green)}
+.sl{display:flex;justify-content:space-between;padding:8px 0;
+  border-bottom:1px solid var(--border);font-size:12px}
+.sl:last-child{border:none}
+</style>
+</head>
+<body>
+
+<div id="login">
+  <div class="card">
+    <div class="logo">G</div>
+    <h1>لوحة تحكم GlutPass</h1>
+    <p class="muted">الدخول للمشرفين فقط</p>
+    <div class="f"><label>البريد الإلكتروني</label><input id="em" type="email" placeholder="admin@glutpass.app"></div>
+    <div class="f"><label>كلمة المرور</label><input id="pw" type="password"></div>
+    <button class="btn" id="go" style="width:100%;margin-top:18px;padding:13px">دخول</button>
+    <p id="lerr" style="color:var(--red);font-size:12px;margin-top:12px"></p>
+  </div>
+</div>
+
+<div id="app" hidden>
+  <aside>
+    <div class="brand">
+      <div class="logo">G</div>
+      <div><b>GlutPass</b><span class="muted">لوحة التحكم</span></div>
+    </div>
+    <nav id="nav"></nav>
+    <div class="out"><button class="btn sec" id="out" style="width:100%">تسجيل الخروج</button></div>
+  </aside>
+  <main>
+    <header><h2 id="ttl"></h2><div class="sp"></div><span class="muted" id="who"></span></header>
+    <section id="view"></section>
+  </main>
+</div>
+
+</body>
+</html>
