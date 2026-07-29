@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'core.dart';
+import 'content.dart';
 import 'screens/home.dart';
 import 'screens/account.dart';
 import 'screens/submit.dart';
@@ -9,6 +10,7 @@ import 'screens/submit.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Supabase.initialize(url: kUrl, anonKey: kKey);
+  await Content.load();   // النصوص من لوحة التحكم — تفشل بصمت وتبقى النسخة المدمجة
   runApp(const App());
 }
 
@@ -110,47 +112,4 @@ class _About extends StatelessWidget {
           const Text('GlutPass',
               textAlign: TextAlign.center,
               style: TextStyle(
-                  fontSize: 26, fontWeight: FontWeight.w700, color: cGreen)),
-          const SizedBox(height: 4),
-          const Text('الإصدار ١٫٠٫٠',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 12, color: cGrey)),
-          const SizedBox(height: 26),
-          Container(
-            padding: const EdgeInsets.all(18),
-            decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(18),
-                border: Border.all(color: cBorder)),
-            child: const Text(
-                'GlutPass هو الدليل الأول في المملكة للأماكن والأطباق الخالية '
-                'من الجلوتين. يبنيه المجتمع بالتجربة والتصويت، ليصبح الخروج '
-                'للأكل تجربة آمنة ومطمئنة لكل مصابي حساسية القمح.',
-                textAlign: TextAlign.right,
-                style: TextStyle(fontSize: 14, color: cDark, height: 1.9)),
-          ),
-          const SizedBox(height: 30),
-          const Text('صُنع بحب لمجتمع السيلياك في السعودية',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 12, color: cGrey)),
-          const SizedBox(height: 40),
-        ],
-      );
-}
-
-class _Soon extends StatelessWidget {
-  final String name;
-  const _Soon(this.name);
-  @override
-  Widget build(BuildContext ctx) => Center(
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          const Icon(Icons.construction, size: 44, color: cGrey),
-          const SizedBox(height: 12),
-          Text('شاشة $name',
-              style: const TextStyle(
-                  fontSize: 17, fontWeight: FontWeight.w700, color: cDark)),
-          const SizedBox(height: 4),
-          const Text('قيد البناء', style: TextStyle(color: cGrey)),
-        ]),
-      );
-}
+                  fontSize: 26, f
