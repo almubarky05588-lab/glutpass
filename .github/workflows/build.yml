@@ -40,9 +40,7 @@ jobs:
       - run: flutter analyze --no-fatal-infos --no-fatal-warnings
 
       - name: Set build number
-        run: |
-          BN=$(( ${{ github.run_number }} + 100 ))
-          echo "BUILD_NUMBER=$BN" >> $GITHUB_ENV
+        run: echo "BUILD_NUMBER=$(( ${{ github.run_number }} + 100 ))" >> $GITHUB_ENV
 
       - name: Build unsigned
         run: flutter build ios --release --no-codesign --build-number=${{ env.BUILD_NUMBER }}
@@ -53,20 +51,21 @@ jobs:
           echo "${{ secrets.ASC_KEY_P8 }}" > ~/private_keys/AuthKey_${{ secrets.ASC_KEY_ID }}.p8
           chmod 600 ~/private_keys/AuthKey_${{ secrets.ASC_KEY_ID }}.p8
 
-      # نكتب إعدادات التوقيع داخل المشروع مباشرة
       - name: Configure signing
         env:
           TEAM_ID: ${{ secrets.TEAM_ID }}
         run: |
           cd ios
+          sed -i '' 's/CODE_SIGN_IDENTITY = "Apple Development";//g' Runner.xcodeproj/project.pbxproj
+          sed -i '' 's/"CODE_SIGN_IDENTITY\[sdk=iphoneos\*\]" = "Apple Development";//g' Runner.xcodeproj/project.pbxproj
+          sed -i '' 's/CODE_SIGN_STYLE = Automatic;/CODE_SIGN_STYLE = Automatic; DEVELOPMENT_TEAM = '"${TEAM_ID}"';/g' Runner.xcodeproj/project.pbxproj
           cat > Flutter/Release.xcconfig <<EOF
           #include "Generated.xcconfig"
           CODE_SIGN_STYLE = Automatic
           DEVELOPMENT_TEAM = ${TEAM_ID}
           PRODUCT_BUNDLE_IDENTIFIER = ${{ env.BUNDLE_ID }}
-          CODE_SIGN_IDENTITY = Apple Distribution
-          CODE_SIGN_IDENTITY[sdk=iphoneos*] = Apple Distribution
           EOF
+          echo "--- Release.xcconfig ---"
           cat Flutter/Release.xcconfig
 
       - name: Archive
@@ -129,10 +128,3 @@ jobs:
 
       - name: Done
         run: echo "✅ رُفع إلى TestFlight"
-
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: ipa
-          path: ios/build/ipa/*.ipa
-          if-no-files-found: ignore
