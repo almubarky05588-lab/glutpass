@@ -7,6 +7,7 @@ import 'content.dart';
 import 'screens/home.dart';
 import 'screens/account.dart';
 import 'screens/submit.dart';
+import 'screens/map.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -57,7 +58,7 @@ class _ShellState extends State<Shell> {
         bottom: false,
         child: IndexedStack(index: _i, children: const [
           HomeScreen(),
-          _Soon('الخريطة'),
+          MapScreen(),
           AccountScreen(),
           _About(),
         ]),
@@ -242,22 +243,5 @@ class _About extends StatelessWidget {
               style: TextStyle(fontSize: 12, color: cGrey)),
           const SizedBox(height: 40),
         ],
-      );
-}
-
-class _Soon extends StatelessWidget {
-  final String name;
-  const _Soon(this.name);
-  @override
-  Widget build(BuildContext ctx) => Center(
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          const Icon(Icons.construction, size: 44, color: cGrey),
-          const SizedBox(height: 12),
-          Text('شاشة $name',
-              style: const TextStyle(
-                  fontSize: 17, fontWeight: FontWeight.w700, color: cDark)),
-          const SizedBox(height: 4),
-          const Text('قيد البناء', style: TextStyle(color: cGrey)),
-        ]),
       );
 }

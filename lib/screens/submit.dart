@@ -1,6 +1,8 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../core.dart';
 
@@ -23,6 +25,7 @@ class _SubmitScreenState extends State<SubmitScreen> {
   String? _msg;
   String? _logoUrl;
   Uint8List? _logoPreview;
+  LatLng? _at;
 
   @override
   void initState() {
@@ -144,6 +147,15 @@ class _SubmitScreenState extends State<SubmitScreen> {
     );
   }
 
+  Future<void> _pickLocation() async {
+    final r = await Navigator.push<LatLng>(
+      context,
+      MaterialPageRoute(
+          builder: (_) => LocationPicker(initial: _at, query: _name.text)),
+    );
+    if (r != null && mounted) setState(() => _at = r);
+  }
+
   Future<void> _addCity() async {
     final ctl = TextEditingController();
     String? err;
@@ -237,6 +249,8 @@ class _SubmitScreenState extends State<SubmitScreen> {
         'suggested_dishes': list.isEmpty ? null : list,
         'note': _note.text.trim().isEmpty ? null : _note.text.trim(),
         'logo_url': _logoUrl,
+        'lat': _at?.latitude,
+        'lng': _at?.longitude,
         'submitted_by': u.id,
       });
       setState(() => _done = true);
@@ -356,6 +370,40 @@ class _SubmitScreenState extends State<SubmitScreen> {
         ),
       );
 
+  Widget _locBox() => GestureDetector(
+        onTap: _pickLocation,
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+              color: _at == null ? Colors.white : cSafeBg,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: _at == null ? cBorder : cGreen)),
+          child: Row(children: [
+            Icon(_at == null ? Icons.add_location_alt_outlined : Icons.place,
+                color: _at == null ? cGrey : cGreen, size: 22),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(_at == null ? 'حدّد موقع المكان' : 'الموقع محدّد',
+                        style: TextStyle(
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w700,
+                            color: _at == null ? cDark : cGreen)),
+                    const SizedBox(height: 2),
+                    Text(
+                        _at == null
+                            ? 'ابحث بالاسم أو ضع الدبوس يدوياً — لن يظهر على الخريطة بدونه'
+                            : '${_at!.latitude.toStringAsFixed(5)} , ${_at!.longitude.toStringAsFixed(5)}',
+                        style: const TextStyle(fontSize: 11, color: cGrey)),
+                  ]),
+            ),
+            const Icon(Icons.arrow_back_ios, size: 14, color: cGrey),
+          ]),
+        ),
+      );
+
   Widget _form(BuildContext ctx) => ListView(
         padding: const EdgeInsets.all(20),
         children: [
@@ -379,6 +427,9 @@ class _SubmitScreenState extends State<SubmitScreen> {
           const SizedBox(height: 22),
           _label('اسم المكان'),
           _input(_name, 'مثال: مطعم لوسين'),
+          const SizedBox(height: 16),
+          _label('الموقع'),
+          _locBox(),
           const SizedBox(height: 16),
           Row(children: [
             const Text('المدينة',
@@ -570,4 +621,255 @@ class _SubmitScreenState extends State<SubmitScreen> {
           ),
         );
       }).toList());
+}
+
+/// شاشة تحديد الموقع — بحث بالاسم أو دبوس يدوي
+class LocationPicker extends StatefulWidget {
+  final LatLng? initial;
+  final String query;
+  const LocationPicker({super.key, this.initial, this.query = ''});
+  @override
+  State<LocationPicker> createState() => _LocationPickerState();
+}
+
+class _LocationPickerState extends State<LocationPicker> {
+  final _mc = MapController();
+  final _q = TextEditingController();
+  LatLng _at = const LatLng(24.7136, 46.6753);
+  List<Map<String, dynamic>> _hits = [];
+  bool _searching = false;
+  bool _open = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.initial != null) _at = widget.initial!;
+    _q.text = widget.query.trim();
+  }
+
+  Future<void> _search() async {
+    final q = _q.text.trim();
+    if (q.length < 2) return;
+    setState(() {
+      _searching = true;
+      _open = true;
+    });
+    try {
+      final r = await Supabase.instance.client.functions.invoke(
+        'place-search',
+        body: {'q': q, 'lat': _at.latitude, 'lng': _at.longitude},
+      );
+      final data = r.data;
+      final list = (data is Map && data['results'] is List)
+          ? (data['results'] as List).cast<Map<String, dynamic>>()
+          : <Map<String, dynamic>>[];
+      if (mounted) setState(() => _hits = list);
+    } catch (_) {
+      if (mounted) setState(() => _hits = []);
+    } finally {
+      if (mounted) setState(() => _searching = false);
+    }
+  }
+
+  void _goto(Map<String, dynamic> h) {
+    final p = LatLng((h['lat'] as num).toDouble(), (h['lng'] as num).toDouble());
+    setState(() {
+      _at = p;
+      _open = false;
+      _hits = [];
+    });
+    _mc.move(p, 16);
+    FocusScope.of(context).unfocus();
+  }
+
+  @override
+  Widget build(BuildContext ctx) {
+    return Scaffold(
+      backgroundColor: cBg,
+      body: SafeArea(
+        child: Column(children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 10, 14, 8),
+            child: Row(children: [
+              IconButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  icon: const Icon(Icons.arrow_back_ios,
+                      size: 18, color: cDark)),
+              Expanded(
+                child: Container(
+                  height: 48,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: cBorder)),
+                  child: Row(children: [
+                    const Icon(Icons.search, size: 19, color: cGreen),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: TextField(
+                        controller: _q,
+                        textAlign: TextAlign.start,
+                        textInputAction: TextInputAction.search,
+                        onSubmitted: (_) => _search(),
+                        decoration: const InputDecoration(
+                            border: InputBorder.none,
+                            isDense: true,
+                            hintText: 'ابحث باسم المطعم أو الحي…',
+                            hintStyle:
+                                TextStyle(color: cGrey, fontSize: 13)),
+                        style: const TextStyle(fontSize: 14, color: cDark),
+                      ),
+                    ),
+                    if (_searching)
+                      const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                              color: cGreen, strokeWidth: 2))
+                    else
+                      GestureDetector(
+                        onTap: _search,
+                        child: const Text('بحث',
+                            style: TextStyle(
+                                color: cGreen,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700)),
+                      ),
+                  ]),
+                ),
+              ),
+            ]),
+          ),
+          Expanded(
+            child: Stack(children: [
+              FlutterMap(
+                mapController: _mc,
+                options: MapOptions(
+                  initialCenter: _at,
+                  initialZoom: widget.initial == null ? 11 : 16,
+                  minZoom: 4,
+                  maxZoom: 18,
+                  onPositionChanged: (pos, _) {
+                    _at = pos.center;
+                  },
+                ),
+                children: [
+                  TileLayer(
+                    urlTemplate:
+                        'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                    userAgentPackageName: 'com.glutpass.glutpass',
+                    maxNativeZoom: 19,
+                  ),
+                ],
+              ),
+              // الدبوس ثابت في المنتصف — الخريطة هي التي تتحرك تحته
+              IgnorePointer(
+                child: Center(
+                  child: Transform.translate(
+                    offset: const Offset(0, -18),
+                    child: const Icon(Icons.location_on,
+                        color: cGreen, size: 44),
+                  ),
+                ),
+              ),
+              if (_open && _hits.isNotEmpty)
+                Positioned(
+                  top: 0,
+                  right: 10,
+                  left: 10,
+                  child: Container(
+                    constraints: const BoxConstraints(maxHeight: 300),
+                    decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: cBorder),
+                        boxShadow: [
+                          BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.12),
+                              blurRadius: 12)
+                        ]),
+                    child: ListView.separated(
+                      shrinkWrap: true,
+                      padding: EdgeInsets.zero,
+                      itemCount: _hits.length,
+                      separatorBuilder: (_, __) => const Divider(
+                          height: 1, color: cBorder, indent: 12, endIndent: 12),
+                      itemBuilder: (_, i) {
+                        final h = _hits[i];
+                        return ListTile(
+                          dense: true,
+                          leading:
+                              const Icon(Icons.place_outlined, color: cGreen),
+                          title: Text('${h['name']}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                  fontSize: 13.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: cDark)),
+                          subtitle: Text('${h['detail'] ?? ''}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                  fontSize: 11, color: cGrey)),
+                          onTap: () => _goto(h),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+              if (_open && !_searching && _hits.isEmpty)
+                Positioned(
+                  top: 0,
+                  right: 10,
+                  left: 10,
+                  child: Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: cBorder)),
+                    child: const Text(
+                        'لا نتائج — حرّك الخريطة وضع الدبوس على الموقع يدوياً',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(fontSize: 12, color: cGrey)),
+                  ),
+                ),
+              Positioned(
+                bottom: 2,
+                right: 8,
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  color: Colors.white70,
+                  child: const Text('© OpenStreetMap',
+                      style: TextStyle(fontSize: 9, color: cGrey)),
+                ),
+              ),
+            ]),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
+            child: Column(children: [
+              const Text('ضع الدبوس على مدخل المكان بدقة',
+                  style: TextStyle(fontSize: 11.5, color: cGrey)),
+              const SizedBox(height: 8),
+              FilledButton(
+                onPressed: () => Navigator.pop(ctx, _at),
+                style: FilledButton.styleFrom(
+                    backgroundColor: cGreen,
+                    minimumSize: const Size.fromHeight(52),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(15))),
+                child: const Text('تأكيد الموقع',
+                    style:
+                        TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+              ),
+            ]),
+          ),
+        ]),
+      ),
+    );
+  }
 }
