@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'core.dart';
@@ -23,6 +24,12 @@ class App extends StatelessWidget {
       title: 'GlutPass',
       debugShowCheckedModeBanner: false,
       locale: const Locale('ar'),
+      supportedLocales: const [Locale('ar'), Locale('en')],
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       theme: b.copyWith(textTheme: GoogleFonts.tajawalTextTheme(b.textTheme)),
       builder: (_, c) =>
           Directionality(textDirection: TextDirection.rtl, child: c!),
@@ -112,7 +119,7 @@ class _About extends StatelessWidget {
           const Text('GlutPass',
               textAlign: TextAlign.center,
               style: TextStyle(
-                                    fontSize: 26, fontWeight: FontWeight.w700, color: cGreen)),
+                  fontSize: 26, fontWeight: FontWeight.w700, color: cGreen)),
           const SizedBox(height: 4),
           const Text('الإصدار ١٫٠٫٠',
               textAlign: TextAlign.center,
@@ -125,7 +132,7 @@ class _About extends StatelessWidget {
                 borderRadius: BorderRadius.circular(18),
                 border: Border.all(color: cBorder)),
             child: Text(Content.t('about.body'),
-                textAlign: TextAlign.right,
+                textAlign: TextAlign.start,
                 style: const TextStyle(
                     fontSize: 14, color: cDark, height: 1.9)),
           ),
@@ -162,4 +169,3 @@ class _Soon extends StatelessWidget {
         ]),
       );
 }
-
