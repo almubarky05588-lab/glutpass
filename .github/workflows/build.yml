@@ -17,6 +17,8 @@ jobs:
       TEAM_ID: ${{ secrets.TEAM_ID }}
       ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
       ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+      FASTLANE_SKIP_UPDATE_CHECK: 1
+      FASTLANE_HIDE_CHANGELOG: 1
 
     steps:
       - uses: actions/checkout@v4
@@ -39,7 +41,7 @@ jobs:
       - run: flutter pub get
 
       - name: Set build number
-        run: echo "BUILD_NUMBER=$(( ${{ github.run_number }} + 200 ))" >> $GITHUB_ENV
+        run: echo "BUILD_NUMBER=$(( ${{ github.run_number }} + 300 ))" >> $GITHUB_ENV
 
       - name: Build unsigned
         run: flutter build ios --release --no-codesign --build-number=${{ env.BUILD_NUMBER }}
@@ -48,12 +50,6 @@ jobs:
         run: |
           mkdir -p ios/keys
           echo "${{ secrets.ASC_KEY_P8 }}" > ios/keys/AuthKey.p8
-
-      - name: Set team in project
-        run: |
-          cd ios
-          sed -i '' "s/DEVELOPMENT_TEAM = \"\";/DEVELOPMENT_TEAM = ${TEAM_ID};/g" Runner.xcodeproj/project.pbxproj || true
-          sed -i '' "s/PRODUCT_BUNDLE_IDENTIFIER = com.glutpass.glutpass;/PRODUCT_BUNDLE_IDENTIFIER = ${BUNDLE_ID};/g" Runner.xcodeproj/project.pbxproj || true
 
       - name: Create Fastfile
         run: |
@@ -70,27 +66,29 @@ jobs:
                 in_house: false
               )
 
-              # ينشئ شهادة ومِلف توزيع تلقائياً إن لم يوجدا
-              sync_code_signing(
-                type: "appstore",
-                app_identifier: ENV["BUNDLE_ID"],
-                team_id: ENV["TEAM_ID"],
-                api_key: api_key,
-                readonly: false,
-                storage_mode: "google_cloud"
-              ) rescue nil
-
-              get_certificates(
-                development: false,
-                api_key: api_key,
-                team_id: ENV["TEAM_ID"]
+              create_keychain(
+                name: "build.keychain",
+                password: "temp1234",
+                default_keychain: true,
+                unlock: true,
+                timeout: 3600,
+                lock_when_sleeps: false
               )
 
-              get_provisioning_profile(
+              cert(
+                development: false,
+                api_key: api_key,
+                team_id: ENV["TEAM_ID"],
+                keychain_path: File.expand_path("~/Library/Keychains/build.keychain-db"),
+                keychain_password: "temp1234"
+              )
+
+              sigh(
                 app_identifier: ENV["BUNDLE_ID"],
                 api_key: api_key,
                 team_id: ENV["TEAM_ID"],
-                development: false
+                development: false,
+                force: true
               )
 
               update_code_signing_settings(
@@ -107,6 +105,7 @@ jobs:
                 scheme: "Runner",
                 configuration: "Release",
                 export_method: "app-store",
+                skip_profile_detection: true,
                 export_options: {
                   provisioningProfiles: {
                     ENV["BUNDLE_ID"] => lane_context[SharedValues::SIGH_NAME]
@@ -121,13 +120,9 @@ jobs:
             end
           end
           RUBY
-          cat ios/fastlane/Fastfile
 
       - name: Run fastlane
         working-directory: ios
-        env:
-          FASTLANE_DISABLE_COLORS: 1
-          MATCH_KEYCHAIN_NAME: build.keychain
         run: |
           gem install fastlane --no-document
           fastlane beta
