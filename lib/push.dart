@@ -14,111 +14,172 @@ const _fbOptions = FirebaseOptions(
   iosBundleId: 'com.glutpass.glutpass',
 );
 
-/// معالج الرسائل والتطبيق مغلق تماماً — لازم يكون دالة عليا.
 @pragma('vm:entry-point')
 Future<void> _bgHandler(RemoteMessage m) async {
-  // لا نفعل شيئاً؛ النظام يعرض الإشعار بنفسه.
+  // النظام يعرض الإشعار بنفسه
 }
 
 class Push {
-  static bool ready = false;
+  // ــــ حالة تشخيصية تُعرض في التطبيق، لأننا نعمل بلا سجلات الجهاز ــــ
+  static bool fbReady = false;
+  static bool permission = false;
+  static String? apns;
+  static String? fcm;
+  static bool saved = false;
+  static String? lastError;
+  static String step = 'لم يبدأ';
 
-  /// يُستدعى عند الإقلاع. لا يرمي استثناءً أبداً —
-  /// فشل الإشعارات يجب ألّا يمنع التطبيق من العمل.
   static Future<void> init() async {
     try {
+      step = 'تهيئة Firebase';
       await Firebase.initializeApp(options: _fbOptions);
+      fbReady = true;
       FirebaseMessaging.onBackgroundMessage(_bgHandler);
-      ready = true;
 
-      // إن كان مسجّلاً دخوله مسبقاً، سجّل جهازه
-      if (Supabase.instance.client.auth.currentUser != null) {
-        await register();
-      }
+      FirebaseMessaging.instance.onTokenRefresh.listen((t) {
+        fcm = t;
+        _save(t);
+      });
 
-      // عند تسجيل الدخول أو الخروج
       Supabase.instance.client.auth.onAuthStateChange.listen((e) async {
-        if (e.event == AuthChangeEvent.signedIn) {
-          await register();
-        } else if (e.event == AuthChangeEvent.signedOut) {
+        if (e.event == AuthChangeEvent.signedOut) {
           await unregister();
+        } else if (e.session != null) {
+          await ensure();
         }
       });
 
-      // تجديد الرمز يحدث تلقائياً من حين لآخر
-      FirebaseMessaging.instance.onTokenRefresh.listen((t) => _save(t));
+      step = 'جاهز';
+      if (Supabase.instance.client.auth.currentUser != null) {
+        await ensure();
+      }
     } catch (e) {
-      debugPrint('Push.init: $e');
+      lastError = 'init: $e';
+      step = 'فشل التهيئة';
     }
   }
 
-  /// يطلب الإذن ثم يحفظ رمز الجهاز.
-  /// يُرجع true إن مُنح الإذن.
-  static Future<bool> register() async {
-    if (!ready) return false;
+  /// يحاول إكمال ما نقص: الإذن ثم الرمز ثم الحفظ.
+  /// آمن للنداء المتكرر.
+  static Future<void> ensure() async {
+    if (!fbReady) return;
     try {
       final fm = FirebaseMessaging.instance;
-      final s = await fm.requestPermission(alert: true, badge: true, sound: true);
-      final granted =
-          s.authorizationStatus == AuthorizationStatus.authorized ||
-              s.authorizationStatus == AuthorizationStatus.provisional;
-      if (!granted) return false;
 
-      // على iOS لا يصل رمز FCM قبل وصول رمز APNs
-      for (var i = 0; i < 10; i++) {
-        final apns = await fm.getAPNSToken();
-        if (apns != null) break;
-        await Future.delayed(const Duration(milliseconds: 600));
+      step = 'فحص الإذن';
+      var s = await fm.getNotificationSettings();
+      if (s.authorizationStatus != AuthorizationStatus.authorized &&
+          s.authorizationStatus != AuthorizationStatus.provisional) {
+        step = 'طلب الإذن';
+        s = await fm.requestPermission(alert: true, badge: true, sound: true);
+      }
+      permission = s.authorizationStatus == AuthorizationStatus.authorized ||
+          s.authorizationStatus == AuthorizationStatus.provisional;
+      if (!permission) {
+        step = 'الإذن مرفوض';
+        return;
       }
 
-      final t = await fm.getToken();
-      if (t != null) await _save(t);
-      return true;
+      // على iOS لا يصدر Firebase رمزه قبل أن تصل موافقة آبل.
+      // ننتظر حتى ٣٠ ثانية بدل ٦.
+      step = 'انتظار رمز آبل';
+      for (var i = 0; i < 30; i++) {
+        try {
+          apns = await fm.getAPNSToken();
+        } catch (e) {
+          lastError = 'apns: $e';
+        }
+        if (apns != null) break;
+        await Future.delayed(const Duration(seconds: 1));
+      }
+
+      step = 'طلب رمز Firebase';
+      for (var i = 0; i < 3; i++) {
+        try {
+          fcm = await fm.getToken();
+        } catch (e) {
+          lastError = 'getToken: $e';
+        }
+        if (fcm != null) break;
+        await Future.delayed(const Duration(seconds: 2));
+      }
+
+      if (fcm == null) {
+        step = apns == null
+            ? 'لم يصل رمز آبل — تحقّق من الاتصال ثم أعد المحاولة'
+            : 'لم يصل رمز Firebase';
+        return;
+      }
+
+      step = 'حفظ الرمز';
+      await _save(fcm!);
+      step = saved ? 'مكتمل' : 'فشل الحفظ';
     } catch (e) {
-      debugPrint('Push.register: $e');
-      return false;
+      lastError = 'ensure: $e';
+      step = 'خطأ';
     }
   }
 
   static Future<void> _save(String token) async {
     try {
       final c = Supabase.instance.client;
-      if (c.auth.currentUser == null) return;
+      if (c.auth.currentUser == null) {
+        lastError = 'save: غير مسجّل دخول';
+        return;
+      }
       await c.rpc('register_device', params: {
         'p_token': token,
-        'p_platform': defaultTargetPlatform == TargetPlatform.iOS
-            ? 'ios'
-            : 'android',
+        'p_platform':
+            defaultTargetPlatform == TargetPlatform.iOS ? 'ios' : 'android',
         'p_locale': 'ar',
       });
+      saved = true;
+      lastError = null;
     } catch (e) {
-      debugPrint('Push._save: $e');
+      saved = false;
+      lastError = 'save: $e';
     }
   }
 
-  /// عند تسجيل الخروج — نوقف الرمز حتى لا تصل إشعارات لحساب آخر
   static Future<void> unregister() async {
-    if (!ready) return;
+    if (!fbReady) return;
     try {
-      final t = await FirebaseMessaging.instance.getToken();
-      if (t == null) return;
+      if (fcm == null) return;
       await Supabase.instance.client
           .from('device_tokens')
-          .update({'is_active': false}).eq('token', t);
+          .update({'is_active': false}).eq('token', fcm!);
+      saved = false;
     } catch (e) {
-      debugPrint('Push.unregister: $e');
+      lastError = 'unregister: $e';
     }
   }
 
-  /// حالة الإذن الحالية — لعرضها في شاشة الحساب
   static Future<bool> isEnabled() async {
-    if (!ready) return false;
+    if (!fbReady) return false;
     try {
       final s = await FirebaseMessaging.instance.getNotificationSettings();
-      return s.authorizationStatus == AuthorizationStatus.authorized ||
+      permission = s.authorizationStatus == AuthorizationStatus.authorized ||
           s.authorizationStatus == AuthorizationStatus.provisional;
+      return permission;
     } catch (_) {
       return false;
     }
+  }
+
+  /// تقرير مقروء يُعرض في شاشة الحساب
+  static String report() {
+    final b = StringBuffer();
+    b.writeln('Firebase: ${fbReady ? "مهيّأ ✓" : "غير مهيّأ ✗"}');
+    b.writeln('الإذن: ${permission ? "ممنوح ✓" : "غير ممنوح ✗"}');
+    b.writeln('رمز آبل: ${apns == null ? "لم يصل ✗" : "وصل ✓"}');
+    b.writeln('رمز Firebase: ${fcm == null ? "لم يصل ✗" : "وصل ✓"}');
+    b.writeln('الحفظ في القاعدة: ${saved ? "تم ✓" : "لم يتم ✗"}');
+    b.writeln('المرحلة: $step');
+    if (lastError != null) {
+      b.writeln('');
+      b.writeln('آخر خطأ:');
+      b.writeln(lastError);
+    }
+    return b.toString();
   }
 }
