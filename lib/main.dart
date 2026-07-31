@@ -206,7 +206,7 @@ class _About extends StatelessWidget {
         padding: const EdgeInsets.all(24),
         children: [
           const SizedBox(height: 30),
-          const Icon(Icons.eco, color: cGreen, size: 64),
+          const Center(child: GlutMark(width: 52)),
           const SizedBox(height: 12),
           const Text('GlutPass',
               textAlign: TextAlign.center,
