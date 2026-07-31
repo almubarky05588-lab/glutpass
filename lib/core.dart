@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'content.dart';
 
 const kUrl = 'https://sreabyhmxetaynqqhlwe.supabase.co';
@@ -14,6 +15,51 @@ const cSafeBg = Color(0xFFE8F3E4);
 const cAmber = Color(0xFFC2770F);
 const cAmberBg = Color(0xFFFDF0E0);
 const cStar = Color(0xFFC7CFC9);
+
+/// المدن — تُدار من لوحة التحكم ويضيفها المستخدمون.
+///
+/// نفس فلسفة Content: نسخة مدمجة تعمل بلا شبكة،
+/// والخادم يستبدلها عند نجاح الجلب فقط.
+class Cities {
+  static const List<String> _bundled = ['الرياض', 'جدة', 'الدمام'];
+  static List<String> _live = [];
+
+  static List<String> get all => _live.isEmpty ? _bundled : _live;
+
+  /// يُستدعى عند الإقلاع. لا يرمي استثناءً أبداً.
+  static Future<void> load() async {
+    try {
+      final rows = await Supabase.instance.client
+          .from('cities')
+          .select('name_ar')
+          .eq('is_active', true)
+          .order('sort_order', ascending: true)
+          .order('name_ar', ascending: true);
+      final l = (rows as List).map((e) => e['name_ar'] as String).toList();
+      if (l.isNotEmpty) _live = l;
+    } catch (_) {
+      // فشل الشبكة — نبقى على النسخة المدمجة
+    }
+  }
+
+  /// يضيف مدينة. يُرجع null عند النجاح، أو نص الخطأ عند الفشل.
+  /// التكرار يمنعه فهرس فريد على الاسم المعياري في القاعدة.
+  static Future<String?> add(String name) async {
+    final n = name.trim();
+    if (n.isEmpty) return 'اكتب اسم المدينة';
+    if (n.length < 2) return 'الاسم قصير جداً';
+    try {
+      await Supabase.instance.client.from('cities').insert({'name_ar': n});
+      await load();
+      return null;
+    } on PostgrestException catch (e) {
+      if (e.code == '23505') return 'المدينة مضافة مسبقاً';
+      return e.message;
+    } catch (e) {
+      return '$e';
+    }
+  }
+}
 
 class Place {
   final String id, nameAr, safety;
@@ -113,7 +159,7 @@ class RatingRow extends StatelessWidget {
         ...List.generate(
             5,
             (_) => const Padding(
-                  padding: EdgeInsets.only(right: 1),
+                  padding: EdgeInsetsDirectional.only(end: 1),
                   child: Icon(Icons.star, size: 10, color: cStar),
                 )),
       ],
