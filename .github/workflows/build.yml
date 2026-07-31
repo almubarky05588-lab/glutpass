@@ -47,11 +47,43 @@ jobs:
           /usr/libexec/PlistBuddy -c "Add :CFBundleLocalizations:0 string ar" "$PL" || true
           /usr/libexec/PlistBuddy -c "Add :CFBundleDevelopmentRegion string ar" "$PL" \
             || /usr/libexec/PlistBuddy -c "Set :CFBundleDevelopmentRegion ar" "$PL"
-          /usr/libexec/PlistBuddy -c "Add :NSPhotoLibraryUsageDescription string 'يحتاج GlutPass الوصول لصورك لاختيار صورة حسابك.'" "$PL" \
-            || /usr/libexec/PlistBuddy -c "Set :NSPhotoLibraryUsageDescription 'يحتاج GlutPass الوصول لصورك لاختيار صورة حسابك.'" "$PL"
-          /usr/libexec/PlistBuddy -c "Add :NSCameraUsageDescription string 'يحتاج GlutPass الكاميرا لالتقاط صورة حسابك.'" "$PL" \
-            || /usr/libexec/PlistBuddy -c "Set :NSCameraUsageDescription 'يحتاج GlutPass الكاميرا لالتقاط صورة حسابك.'" "$PL"
+          /usr/libexec/PlistBuddy -c "Add :NSPhotoLibraryUsageDescription string 'يحتاج GlutPass الوصول لصورك لاختيار صورة حسابك أو شعار المكان.'" "$PL" \
+            || /usr/libexec/PlistBuddy -c "Set :NSPhotoLibraryUsageDescription 'يحتاج GlutPass الوصول لصورك لاختيار صورة حسابك أو شعار المكان.'" "$PL"
+          /usr/libexec/PlistBuddy -c "Add :NSCameraUsageDescription string 'يحتاج GlutPass الكاميرا لالتقاط صورة حسابك أو شعار المكان.'" "$PL" \
+            || /usr/libexec/PlistBuddy -c "Set :NSCameraUsageDescription 'يحتاج GlutPass الكاميرا لالتقاط صورة حسابك أو شعار المكان.'" "$PL"
+          /usr/libexec/PlistBuddy -c "Add :UIBackgroundModes array" "$PL" || true
+          /usr/libexec/PlistBuddy -c "Add :UIBackgroundModes:0 string remote-notification" "$PL" || true
           /usr/libexec/PlistBuddy -c "Print" "$PL"
+
+      - name: Add push entitlement
+        run: |
+          ENT=ios/Runner/Runner.entitlements
+          if [ ! -f "$ENT" ]; then
+            cat > "$ENT" <<'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+          </dict>
+          </plist>
+          PLIST
+          fi
+          /usr/libexec/PlistBuddy -c "Add :aps-environment string production" "$ENT" \
+            || /usr/libexec/PlistBuddy -c "Set :aps-environment production" "$ENT"
+          /usr/libexec/PlistBuddy -c "Print" "$ENT"
+          python3 - <<'PY'
+          import re, pathlib
+          p = pathlib.Path('ios/Runner.xcodeproj/project.pbxproj')
+          s = p.read_text()
+          if 'CODE_SIGN_ENTITLEMENTS' not in s:
+              s = s.replace(
+                  'PRODUCT_BUNDLE_IDENTIFIER = com.glutpass.glutpass;',
+                  'PRODUCT_BUNDLE_IDENTIFIER = com.glutpass.glutpass;\n\t\t\t\tCODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;')
+              p.write_text(s)
+              print('entitlements linked')
+          else:
+              print('already linked')
+          PY
 
       - run: flutter pub get
 
@@ -84,25 +116,31 @@ jobs:
               # حذف شهادات التوزيع القديمة — الخادم جديد كل مرة ولا يملك مفاتيحها
               begin
                 require 'spaceship'
+                UI.important("=== بدء تنظيف الشهادات ===")
                 Spaceship::ConnectAPI.token = Spaceship::ConnectAPI::Token.create(
                   key_id: ENV["ASC_KEY_ID"],
                   issuer_id: ENV["ASC_ISSUER_ID"],
                   filepath: File.absolute_path("./keys/AuthKey.p8")
                 )
-                old = Spaceship::ConnectAPI::Certificate.all.select do |c|
+                all = Spaceship::ConnectAPI::Certificate.all
+                UI.important("إجمالي الشهادات: #{all.count}")
+                all.each { |c| UI.important("  #{c.id} — نوع: #{c.certificate_type}") }
+                old = all.select do |c|
                   ["IOS_DISTRIBUTION", "DISTRIBUTION"].include?(c.certificate_type.to_s)
                 end
-                UI.message("شهادات توزيع قديمة: #{old.count}")
+                UI.important("شهادات توزيع قديمة: #{old.count}")
                 old.each do |c|
                   begin
                     c.delete!
-                    UI.message("حُذفت: #{c.id}")
+                    UI.important("حُذفت: #{c.id}")
                   rescue => e
-                    UI.important("تعذّر حذف #{c.id}: #{e}")
+                    UI.important("تعذّر حذف #{c.id}: #{e.class} — #{e.message}")
                   end
                 end
+                UI.important("=== انتهى التنظيف ===")
               rescue => e
-                UI.important("تخطّي التنظيف: #{e}")
+                UI.important("!!! فشل التنظيف كلياً: #{e.class} — #{e.message}")
+                UI.important(e.backtrace.first(5).join("\n")) if e.backtrace
               end
 
               create_keychain(
