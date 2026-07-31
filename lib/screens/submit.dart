@@ -12,12 +12,18 @@ class _SubmitScreenState extends State<SubmitScreen> {
   final _name = TextEditingController();
   final _dishes = TextEditingController();
   final _note = TextEditingController();
-  String _city = 'الرياض';
+  late String _city;
   String _type = 'restaurant';
   String _safety = 'UNKNOWN';
   bool _busy = false;
   bool _done = false;
   String? _msg;
+
+  @override
+  void initState() {
+    super.initState();
+    _city = Cities.all.isNotEmpty ? Cities.all.first : 'الرياض';
+  }
 
   static const types = {
     'restaurant': 'مطعم',
@@ -36,6 +42,67 @@ class _SubmitScreenState extends State<SubmitScreen> {
       : k == 'SHARED_PREP'
           ? cAmber
           : cGrey;
+
+  Future<void> _addCity() async {
+    final ctl = TextEditingController();
+    String? err;
+    await showDialog<void>(
+      context: context,
+      builder: (dctx) => StatefulBuilder(
+        builder: (dctx, setD) => AlertDialog(
+          backgroundColor: Colors.white,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          title: const Text('إضافة مدينة',
+              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+          content: Column(mainAxisSize: MainAxisSize.min, children: [
+            TextField(
+              controller: ctl,
+              autofocus: true,
+              textAlign: TextAlign.start,
+              decoration: InputDecoration(
+                hintText: 'اسم المدينة',
+                hintStyle: const TextStyle(color: cGrey, fontSize: 13),
+                enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: cBorder)),
+                focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: cGreen)),
+              ),
+            ),
+            if (err != null) ...[
+              const SizedBox(height: 10),
+              Text(err!,
+                  style: const TextStyle(color: cAmber, fontSize: 12)),
+            ],
+            const SizedBox(height: 10),
+            const Text('تُضاف للجميع — تأكّد من الإملاء',
+                style: TextStyle(color: cGrey, fontSize: 11)),
+          ]),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(dctx),
+                child: const Text('إلغاء',
+                    style: TextStyle(color: cGrey))),
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: cGreen),
+              onPressed: () async {
+                final e = await Cities.add(ctl.text);
+                if (e != null) {
+                  setD(() => err = e);
+                  return;
+                }
+                if (dctx.mounted) Navigator.pop(dctx);
+                if (mounted) setState(() => _city = ctl.text.trim());
+              },
+              child: const Text('إضافة'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   Future<void> _send() async {
     final u = Supabase.instance.client.auth.currentUser;
@@ -92,15 +159,16 @@ class _SubmitScreenState extends State<SubmitScreen> {
               alignment: Alignment.center,
               decoration:
                   const BoxDecoration(color: cSafeBg, shape: BoxShape.circle),
-              child: const Icon(Icons.send_rounded, color: cGreen, size: 44),
+              child: const Icon(Icons.check_circle, color: cGreen, size: 46),
             ),
             const SizedBox(height: 20),
-            const Text('وصلت مساهمتك',
+            const Text('نُشر المكان',
                 style: TextStyle(
                     fontSize: 22, fontWeight: FontWeight.w700, color: cDark)),
             const SizedBox(height: 8),
             const Text(
-                'سيراجعها فريق الإشراف قبل إضافتها للدليل، ونخبرك بالنتيجة.',
+                'ظهر في الدليل مباشرةً. شكراً لمساهمتك — '
+                'وتصنيف الأمان يتحدّث تلقائياً كلما صوّت أحد على تجربته.',
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 13, color: cGrey, height: 1.6)),
             const SizedBox(height: 28),
@@ -139,9 +207,26 @@ class _SubmitScreenState extends State<SubmitScreen> {
           _label('اسم المكان'),
           _input(_name, 'مثال: مطعم لوسين'),
           const SizedBox(height: 16),
-          _label('المدينة'),
-          _pills(
-              ['الرياض', 'جدة', 'الدمام'], _city, (v) => setState(() => _city = v)),
+          Row(children: [
+            const Text('المدينة',
+                style: TextStyle(
+                    fontSize: 13, fontWeight: FontWeight.w700, color: cDark)),
+            const Spacer(),
+            GestureDetector(
+              onTap: _addCity,
+              child: const Row(mainAxisSize: MainAxisSize.min, children: [
+                Icon(Icons.add, size: 15, color: cGreen),
+                SizedBox(width: 3),
+                Text('مدينة جديدة',
+                    style: TextStyle(
+                        fontSize: 12.5,
+                        color: cGreen,
+                        fontWeight: FontWeight.w700)),
+              ]),
+            ),
+          ]),
+          const SizedBox(height: 8),
+          _cityWrap(),
           const SizedBox(height: 16),
           _label('نوع المكان'),
           _pills(types.keys.toList(), _type, (v) => setState(() => _type = v),
@@ -222,7 +307,7 @@ class _SubmitScreenState extends State<SubmitScreen> {
                     height: 20,
                     child: CircularProgressIndicator(
                         color: Colors.white, strokeWidth: 2))
-                : const Text('إضافة المكان',
+                : const Text('نشر المكان',
                     style:
                         TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
           ),
@@ -261,6 +346,30 @@ class _SubmitScreenState extends State<SubmitScreen> {
               hintStyle: const TextStyle(color: cGrey, fontSize: 13)),
           style: const TextStyle(fontSize: 15, color: cDark),
         ),
+      );
+
+  Widget _cityWrap() => Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: Cities.all.map((c) {
+          final on = c == _city;
+          return GestureDetector(
+            onTap: () => setState(() => _city = c),
+            child: Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+              decoration: BoxDecoration(
+                  color: on ? cGreen : Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: on ? cGreen : cBorder)),
+              child: Text(c,
+                  style: TextStyle(
+                      color: on ? Colors.white : cDark,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600)),
+            ),
+          );
+        }).toList(),
       );
 
   Widget _pills(List<String> keys, String sel, ValueChanged<String> onTap,
