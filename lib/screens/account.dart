@@ -34,7 +34,12 @@ class _AccountScreenState extends State<AccountScreen> {
     final c = Supabase.instance.client;
     final u = c.auth.currentUser;
     if (u == null) {
-      if (mounted) setState(() { _me = null; _saved = []; });
+      if (mounted) {
+        setState(() {
+          _me = null;
+          _saved = [];
+        });
+      }
       return;
     }
     try {
@@ -44,8 +49,10 @@ class _AccountScreenState extends State<AccountScreen> {
           .eq('id', u.id)
           .maybeSingle();
       final v = await c.from('votes').select('id').eq('user_id', u.id);
-      final subs =
-          await c.from('place_submissions').select('id').eq('submitted_by', u.id);
+      final subs = await c
+          .from('place_submissions')
+          .select('id')
+          .eq('submitted_by', u.id);
       final sv = await c
           .from('saved_places')
           .select('places(${Place.cols})')
@@ -75,7 +82,10 @@ class _AccountScreenState extends State<AccountScreen> {
   }
 
   Future<void> _submit() async {
-    setState(() { _busy = true; _msg = null; });
+    setState(() {
+      _busy = true;
+      _msg = null;
+    });
     try {
       final a = Supabase.instance.client.auth;
       if (_signup) {
@@ -154,16 +164,16 @@ class _AccountScreenState extends State<AccountScreen> {
               child: const Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
+                    Icon(Icons.verified, color: cGreen, size: 16),
+                    SizedBox(width: 6),
                     Flexible(
                       child: Text('مصاب بحساسية القمح — أصواتك بوزن مضاعف',
                           style: TextStyle(color: cGreen, fontSize: 12)),
                     ),
-                    SizedBox(width: 6),
-                    Icon(Icons.verified, color: cGreen, size: 16),
                   ]),
             ),
           const SizedBox(height: 24),
-          const Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+          const Row(children: [
             Text('أماكني المحفوظة',
                 style: TextStyle(
                     fontSize: 16, fontWeight: FontWeight.w700, color: cDark)),
@@ -190,22 +200,28 @@ class _AccountScreenState extends State<AccountScreen> {
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(color: cBorder)),
                   child: Row(children: [
-                    SafetyBadge(p),
-                    const Spacer(),
-                    Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Text(p.nameAr,
-                              style: const TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w700,
-                                  color: cDark)),
-                          Text('${p.cuisine ?? ''} · ${p.branch ?? ''}',
-                              style: const TextStyle(
-                                  fontSize: 11, color: cGrey)),
-                        ]),
-                    const SizedBox(width: 10),
                     PlaceAvatar(p, size: 44),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(p.nameAr,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w700,
+                                    color: cDark)),
+                            Text('${p.cuisine ?? ''} · ${p.branch ?? ''}',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                    fontSize: 11, color: cGrey)),
+                          ]),
+                    ),
+                    const SizedBox(width: 8),
+                    SafetyBadge(p),
                   ]),
                 ),
               )),
@@ -265,7 +281,7 @@ class _AccountScreenState extends State<AccountScreen> {
           _field(_pass, 'كلمة المرور', '٦ أحرف على الأقل', hide: true),
           if (_signup) ...[
             const SizedBox(height: 14),
-            const Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+            const Row(children: [
               Text('المدينة',
                   style: TextStyle(
                       fontSize: 13,
@@ -274,28 +290,26 @@ class _AccountScreenState extends State<AccountScreen> {
             ]),
             const SizedBox(height: 6),
             Row(
-                mainAxisAlignment: MainAxisAlignment.end,
                 children: ['الرياض', 'جدة', 'الدمام'].map((c) {
-                  final on = c == _city;
-                  return Padding(
-                    padding: const EdgeInsets.only(left: 8),
-                    child: GestureDetector(
-                      onTap: () => setState(() => _city = c),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 8),
-                        decoration: BoxDecoration(
-                            color: on ? cGreen : Colors.white,
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: on ? cGreen : cBorder)),
-                        child: Text(c,
-                            style: TextStyle(
-                                color: on ? Colors.white : cDark,
-                                fontSize: 13)),
-                      ),
-                    ),
-                  );
-                }).toList()),
+              final on = c == _city;
+              return Padding(
+                padding: const EdgeInsetsDirectional.only(end: 8),
+                child: GestureDetector(
+                  onTap: () => setState(() => _city = c),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 8),
+                    decoration: BoxDecoration(
+                        color: on ? cGreen : Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: on ? cGreen : cBorder)),
+                    child: Text(c,
+                        style: TextStyle(
+                            color: on ? Colors.white : cDark, fontSize: 13)),
+                  ),
+                ),
+              );
+            }).toList()),
             const SizedBox(height: 14),
             GestureDetector(
               onTap: () => setState(() => _celiac = !_celiac),
@@ -312,18 +326,20 @@ class _AccountScreenState extends State<AccountScreen> {
                           : Icons.check_box_outline_blank,
                       color: _celiac ? cGreen : cGrey,
                       size: 20),
-                  const Spacer(),
-                  const Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Text('أنا مصاب بحساسية القمح (السيلياك)',
-                            style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: cDark)),
-                        Text('لعرض تنبيهات الأمان بشكل أوضح',
-                            style: TextStyle(fontSize: 11, color: cGrey)),
-                      ]),
+                  const SizedBox(width: 10),
+                  const Expanded(
+                    child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('أنا مصاب بحساسية القمح (السيلياك)',
+                              style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: cDark)),
+                          Text('لعرض تنبيهات الأمان بشكل أوضح',
+                              style: TextStyle(fontSize: 11, color: cGrey)),
+                        ]),
+                  ),
                 ]),
               ),
             ),
@@ -371,7 +387,7 @@ class _AccountScreenState extends State<AccountScreen> {
 
   Widget _field(TextEditingController c, String label, String hint,
           {bool hide = false}) =>
-      Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+      Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text(label,
             style: const TextStyle(
                 fontSize: 13, fontWeight: FontWeight.w700, color: cDark)),
@@ -386,7 +402,7 @@ class _AccountScreenState extends State<AccountScreen> {
           child: TextField(
             controller: c,
             obscureText: hide,
-            textAlign: TextAlign.right,
+            textAlign: TextAlign.start,
             keyboardType:
                 hide ? TextInputType.text : TextInputType.emailAddress,
             decoration: InputDecoration(
@@ -398,4 +414,3 @@ class _AccountScreenState extends State<AccountScreen> {
         ),
       ]);
 }
-
