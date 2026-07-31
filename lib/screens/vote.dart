@@ -70,7 +70,8 @@ class _VoteScreenState extends State<VoteScreen> {
       if (mounted) setState(() => _busy = false);
     }
   }
-@override
+
+  @override
   Widget build(BuildContext ctx) {
     return Scaffold(
       backgroundColor: cBg,
@@ -117,16 +118,15 @@ class _VoteScreenState extends State<VoteScreen> {
         padding: const EdgeInsets.all(20),
         children: [
           Row(children: [
-            const SizedBox(width: 44),
+            IconButton(
+                onPressed: () => Navigator.pop(ctx),
+                icon: const Icon(Icons.arrow_back_ios, size: 18, color: cDark)),
             const Spacer(),
             const Text('قيّم تجربتك',
                 style: TextStyle(
                     fontSize: 19, fontWeight: FontWeight.w700, color: cDark)),
             const Spacer(),
-            IconButton(
-                onPressed: () => Navigator.pop(ctx),
-                icon: const Icon(Icons.arrow_forward_ios,
-                    size: 18, color: cDark)),
+            const SizedBox(width: 44),
           ]),
           const SizedBox(height: 10),
           Container(
@@ -140,7 +140,7 @@ class _VoteScreenState extends State<VoteScreen> {
               const SizedBox(width: 10),
               Expanded(
                 child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(widget.dish?.nameAr ?? widget.place.nameAr,
                           maxLines: 1,
@@ -224,7 +224,7 @@ class _VoteScreenState extends State<VoteScreen> {
           Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: List.generate(5, (i) {
-                final n = 5 - i;
+                final n = i + 1;
                 return IconButton(
                   onPressed: () => setState(() => _stars = n),
                   icon: Icon(_stars >= n ? Icons.star : Icons.star_border,
@@ -248,7 +248,7 @@ class _VoteScreenState extends State<VoteScreen> {
             child: TextField(
               controller: _comment,
               maxLines: 4,
-              textAlign: TextAlign.right,
+              textAlign: TextAlign.start,
               decoration: const InputDecoration(
                   border: InputBorder.none,
                   hintText: 'اكتب تفاصيل تجربتك...',
