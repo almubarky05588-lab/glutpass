@@ -18,7 +18,7 @@ class GlutMark extends StatelessWidget {
   Widget build(BuildContext context) => SizedBox(
         width: width,
         height: width * 600.0 / 480.0,
-        child: CustomPaint(painter: const _MarkPainter(_cLeaf)),
+        child: CustomPaint(painter: _MarkPainter(color)),
       );
 }
 
