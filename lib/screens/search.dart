@@ -67,7 +67,12 @@ class _SearchScreenState extends State<SearchScreen> {
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
             child: Row(children: [
-              const SizedBox(width: 40),
+              SizedBox(
+                  width: 40,
+                  child: IconButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      icon: const Icon(Icons.arrow_back_ios,
+                          size: 18, color: cDark))),
               const Expanded(
                   child: Text('البحث',
                       textAlign: TextAlign.center,
@@ -75,12 +80,7 @@ class _SearchScreenState extends State<SearchScreen> {
                           fontSize: 19,
                           fontWeight: FontWeight.w700,
                           color: cDark))),
-              SizedBox(
-                  width: 40,
-                  child: IconButton(
-                      onPressed: () => Navigator.pop(ctx),
-                      icon: const Icon(Icons.arrow_forward_ios,
-                          size: 18, color: cDark))),
+              const SizedBox(width: 40),
             ]),
           ),
           Container(
@@ -92,10 +92,12 @@ class _SearchScreenState extends State<SearchScreen> {
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(color: cGreen, width: 1.4)),
             child: Row(children: [
+              const Icon(Icons.search, size: 20, color: cGreen),
+              const SizedBox(width: 8),
               Expanded(
                 child: TextField(
                   controller: _c,
-                  textAlign: TextAlign.right,
+                  textAlign: TextAlign.start,
                   onChanged: (v) {
                     _q = v;
                     _run();
@@ -107,7 +109,6 @@ class _SearchScreenState extends State<SearchScreen> {
                   style: const TextStyle(fontSize: 15, color: cDark),
                 ),
               ),
-              const Icon(Icons.search, size: 20, color: cGreen),
             ]),
           ),
           const SizedBox(height: 14),
@@ -143,7 +144,6 @@ class _SearchScreenState extends State<SearchScreen> {
                   padding: const EdgeInsets.symmetric(horizontal: 20),
                   children: [
                     Row(children: [
-                      const Spacer(),
                       Text('${ps.length} نتيجة',
                           style: const TextStyle(color: cGrey, fontSize: 13)),
                     ]),
@@ -195,22 +195,32 @@ class _SearchScreenState extends State<SearchScreen> {
               border: Border.all(color: cBorder)),
           child: Column(children: [
             Row(children: [
-              const Spacer(),
-              Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                Text(p.nameAr,
-                    style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                        color: cDark)),
-                if (p.nameEn != null)
-                  Text(p.nameEn!,
-                      style: const TextStyle(fontSize: 11, color: cGrey)),
-                const SizedBox(height: 3),
-                Text(p.note ?? '',
-                    style: const TextStyle(fontSize: 12, color: cGrey)),
-              ]),
-              const SizedBox(width: 10),
               PlaceAvatar(p),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(p.nameAr,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              color: cDark)),
+                      if (p.nameEn != null)
+                        Text(p.nameEn!,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style:
+                                const TextStyle(fontSize: 11, color: cGrey)),
+                      const SizedBox(height: 3),
+                      Text(p.note ?? '',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 12, color: cGrey)),
+                    ]),
+              ),
             ]),
             const SizedBox(height: 10),
             Row(children: [SafetyBadge(p), const Spacer(), RatingRow(p)]),
@@ -222,15 +232,14 @@ class _SearchScreenState extends State<SearchScreen> {
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
             color: cSafeBg, borderRadius: BorderRadius.circular(18)),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           const Text('نصيحة المجتمع',
               style: TextStyle(
                   color: cDark, fontSize: 14, fontWeight: FontWeight.w700)),
           const SizedBox(height: 6),
           Text(t,
-              textAlign: TextAlign.right,
+              textAlign: TextAlign.start,
               style: const TextStyle(color: cDark, fontSize: 12, height: 1.5)),
         ]),
       );
 }
-
