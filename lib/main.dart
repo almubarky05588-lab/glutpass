@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'core.dart';
 import 'content.dart';
@@ -9,6 +10,7 @@ import 'screens/home.dart';
 import 'screens/account.dart';
 import 'screens/submit.dart';
 import 'screens/map.dart';
+import 'screens/onboarding.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -17,11 +19,28 @@ Future<void> main() async {
   await Content.load();
   await Cities.load();
   await Push.init();
-  runApp(const App());
+
+  // عند فشل القراءة نفترض أنه رآها — تكرارها كل إقلاع أسوأ من تخطّيها
+  bool seen = true;
+  try {
+    final p = await SharedPreferences.getInstance();
+    seen = p.getBool(kOnboardingSeenKey) ?? false;
+  } catch (_) {}
+
+  runApp(App(showOnboarding: !seen));
 }
 
-class App extends StatelessWidget {
-  const App({super.key});
+class App extends StatefulWidget {
+  final bool showOnboarding;
+  const App({super.key, required this.showOnboarding});
+
+  @override
+  State<App> createState() => _AppState();
+}
+
+class _AppState extends State<App> {
+  late bool _onboarding = widget.showOnboarding;
+
   @override
   Widget build(BuildContext ctx) {
     final b = ThemeData(useMaterial3: true, scaffoldBackgroundColor: cBg);
@@ -38,7 +57,10 @@ class App extends StatelessWidget {
       theme: b.copyWith(textTheme: GoogleFonts.tajawalTextTheme(b.textTheme)),
       builder: (_, c) =>
           Directionality(textDirection: TextDirection.rtl, child: c!),
-      home: const Shell(),
+      home: _onboarding
+          ? OnboardingScreen(
+              onFinish: () => setState(() => _onboarding = false))
+          : const Shell(),
     );
   }
 }
@@ -156,9 +178,7 @@ class LegalScreen extends StatelessWidget {
                       borderRadius: BorderRadius.circular(18),
                       border: Border.all(color: cBorder)),
                   child: Text(
-                      body.trim().isEmpty
-                          ? 'لم يُنشر هذا النص بعد.'
-                          : body,
+                      body.trim().isEmpty ? 'لم يُنشر هذا النص بعد.' : body,
                       textAlign: TextAlign.start,
                       style: const TextStyle(
                           fontSize: 14, color: cDark, height: 1.9)),
@@ -205,8 +225,8 @@ class _About extends StatelessWidget {
                 border: Border.all(color: cBorder)),
             child: Text(Content.t('about.body'),
                 textAlign: TextAlign.start,
-                style: const TextStyle(
-                    fontSize: 14, color: cDark, height: 1.9)),
+                style:
+                    const TextStyle(fontSize: 14, color: cDark, height: 1.9)),
           ),
           const SizedBox(height: 18),
           Row(mainAxisAlignment: MainAxisAlignment.center, children: [
@@ -214,8 +234,7 @@ class _About extends StatelessWidget {
               child: TextButton(
                 onPressed: () =>
                     _open(ctx, 'legal.privacy', 'legal.privacy.body'),
-                child: Text(
-                    Content.t('legal.privacy').split('\n').first.trim(),
+                child: Text(Content.t('legal.privacy').split('\n').first.trim(),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
@@ -228,8 +247,7 @@ class _About extends StatelessWidget {
             Flexible(
               child: TextButton(
                 onPressed: () => _open(ctx, 'legal.terms', 'legal.terms.body'),
-                child: Text(
-                    Content.t('legal.terms').split('\n').first.trim(),
+                child: Text(Content.t('legal.terms').split('\n').first.trim(),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
