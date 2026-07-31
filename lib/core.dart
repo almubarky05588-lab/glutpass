@@ -42,7 +42,6 @@ class Place {
 
   bool get isSafe => safety == 'SEPARATE_PREP';
 
-  // النصوص تأتي من لوحة التحكم — ومعها نسخة مدمجة احتياطية
   String get badgeText => isSafe
       ? Content.t('safety.separate_prep.label')
       : safety == 'SHARED_PREP'
@@ -71,19 +70,21 @@ class SafetyBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
       decoration: BoxDecoration(
           color: place.badgeBg, borderRadius: BorderRadius.circular(13)),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
+          Icon(place.badgeIcon, color: place.badgeFg, size: 12),
+          const SizedBox(width: 4),
           Text(place.badgeText,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: TextStyle(
                   color: place.badgeFg,
-                  fontSize: 11,
+                  fontSize: 10.5,
                   fontWeight: FontWeight.w600)),
-          const SizedBox(width: 4),
-          Icon(place.badgeIcon, color: place.badgeFg, size: 12),
         ],
       ),
     );
@@ -99,18 +100,22 @@ class RatingRow extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
+        Flexible(
+          child: Text(place.safetyLine,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w700,
+                  color: place.badgeFg)),
+        ),
+        const SizedBox(width: 6),
         ...List.generate(
             5,
             (_) => const Padding(
-                  padding: EdgeInsets.only(left: 1),
+                  padding: EdgeInsets.only(right: 1),
                   child: Icon(Icons.star, size: 10, color: cStar),
                 )),
-        const SizedBox(width: 6),
-        Text(place.safetyLine,
-            style: TextStyle(
-                fontSize: 11.5,
-                fontWeight: FontWeight.w700,
-                color: place.badgeFg)),
       ],
     );
   }
