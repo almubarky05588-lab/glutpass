@@ -1,4 +1,6 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../core.dart';
 
@@ -17,7 +19,10 @@ class _SubmitScreenState extends State<SubmitScreen> {
   String _safety = 'UNKNOWN';
   bool _busy = false;
   bool _done = false;
+  bool _upLogo = false;
   String? _msg;
+  String? _logoUrl;
+  Uint8List? _logoPreview;
 
   @override
   void initState() {
@@ -42,6 +47,102 @@ class _SubmitScreenState extends State<SubmitScreen> {
       : k == 'SHARED_PREP'
           ? cAmber
           : cGrey;
+
+  Future<void> _pickLogo(ImageSource src) async {
+    final c = Supabase.instance.client;
+    final u = c.auth.currentUser;
+    if (u == null) {
+      setState(() => _msg = 'سجّل الدخول من تبويب «حسابي» أولاً');
+      return;
+    }
+    try {
+      final x = await ImagePicker()
+          .pickImage(source: src, maxWidth: 600, imageQuality: 85);
+      if (x == null) return;
+      final bytes = await x.readAsBytes();
+      if (bytes.lengthInBytes > 2 * 1024 * 1024) {
+        setState(() => _msg = 'الصورة أكبر من ٢ ميجابايت');
+        return;
+      }
+      setState(() {
+        _logoPreview = bytes;
+        _upLogo = true;
+        _msg = null;
+      });
+      final path =
+          'submissions/${u.id}/${DateTime.now().millisecondsSinceEpoch}.jpg';
+      await c.storage.from('places').uploadBinary(path, bytes,
+          fileOptions: const FileOptions(
+              upsert: true, contentType: 'image/jpeg'));
+      final url = c.storage.from('places').getPublicUrl(path);
+      if (mounted) {
+        setState(() {
+          _logoUrl = url;
+          _upLogo = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _upLogo = false;
+          _logoPreview = null;
+          _msg = '$e';
+        });
+      }
+    }
+  }
+
+  void _logoSheet() {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
+      builder: (sctx) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const SizedBox(height: 10),
+          Container(
+              width: 42,
+              height: 4,
+              decoration: BoxDecoration(
+                  color: cBorder, borderRadius: BorderRadius.circular(2))),
+          const SizedBox(height: 14),
+          ListTile(
+            leading: const Icon(Icons.photo_library_outlined, color: cGreen),
+            title: const Text('اختيار من الصور',
+                style: TextStyle(fontSize: 14, color: cDark)),
+            onTap: () {
+              Navigator.pop(sctx);
+              _pickLogo(ImageSource.gallery);
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.photo_camera_outlined, color: cGreen),
+            title: const Text('التقاط صورة',
+                style: TextStyle(fontSize: 14, color: cDark)),
+            onTap: () {
+              Navigator.pop(sctx);
+              _pickLogo(ImageSource.camera);
+            },
+          ),
+          if (_logoPreview != null)
+            ListTile(
+              leading: const Icon(Icons.delete_outline, color: cAmber),
+              title: const Text('حذف الشعار',
+                  style: TextStyle(fontSize: 14, color: cAmber)),
+              onTap: () {
+                Navigator.pop(sctx);
+                setState(() {
+                  _logoPreview = null;
+                  _logoUrl = null;
+                });
+              },
+            ),
+          const SizedBox(height: 8),
+        ]),
+      ),
+    );
+  }
 
   Future<void> _addCity() async {
     final ctl = TextEditingController();
@@ -114,6 +215,10 @@ class _SubmitScreenState extends State<SubmitScreen> {
       setState(() => _msg = 'اكتب اسم المكان');
       return;
     }
+    if (_upLogo) {
+      setState(() => _msg = 'انتظر اكتمال رفع الشعار');
+      return;
+    }
     setState(() {
       _busy = true;
       _msg = null;
@@ -131,6 +236,7 @@ class _SubmitScreenState extends State<SubmitScreen> {
         'claimed_safety': _safety,
         'suggested_dishes': list.isEmpty ? null : list,
         'note': _note.text.trim().isEmpty ? null : _note.text.trim(),
+        'logo_url': _logoUrl,
         'submitted_by': u.id,
       });
       setState(() => _done = true);
@@ -185,6 +291,71 @@ class _SubmitScreenState extends State<SubmitScreen> {
         ),
       );
 
+  Widget _logoPicker() => Center(
+        child: GestureDetector(
+          onTap: _logoSheet,
+          child: Column(children: [
+            Stack(alignment: Alignment.center, children: [
+              Container(
+                width: 88,
+                height: 88,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.white,
+                  border: Border.all(color: cBorder, width: 1.5),
+                  image: _logoPreview == null
+                      ? null
+                      : DecorationImage(
+                          image: MemoryImage(_logoPreview!),
+                          fit: BoxFit.cover),
+                ),
+                child: _logoPreview == null
+                    ? const Icon(Icons.storefront_outlined,
+                        color: cGrey, size: 34)
+                    : null,
+              ),
+              if (_upLogo)
+                Container(
+                  width: 88,
+                  height: 88,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.black.withValues(alpha: 0.35)),
+                  child: const SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(
+                          color: Colors.white, strokeWidth: 2.4)),
+                ),
+              Positioned(
+                bottom: 0,
+                left: 0,
+                child: Container(
+                  width: 28,
+                  height: 28,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                      color: cGreen,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white, width: 2)),
+                  child: const Icon(Icons.add, size: 16, color: Colors.white),
+                ),
+              ),
+            ]),
+            const SizedBox(height: 8),
+            Text(
+                _logoPreview == null
+                    ? 'أضف شعار المكان (اختياري)'
+                    : _upLogo
+                        ? 'جارِ الرفع…'
+                        : 'اضغط لتغيير الشعار',
+                style: const TextStyle(fontSize: 12, color: cGrey)),
+          ]),
+        ),
+      );
+
   Widget _form(BuildContext ctx) => ListView(
         padding: const EdgeInsets.all(20),
         children: [
@@ -203,6 +374,8 @@ class _SubmitScreenState extends State<SubmitScreen> {
           const Text('ساهم في إثراء الدليل — أضف مكاناً جرّبته',
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 13, color: cGrey)),
+          const SizedBox(height: 20),
+          _logoPicker(),
           const SizedBox(height: 22),
           _label('اسم المكان'),
           _input(_name, 'مثال: مطعم لوسين'),
