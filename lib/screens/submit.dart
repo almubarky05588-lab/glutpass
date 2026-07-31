@@ -123,8 +123,7 @@ class _SubmitScreenState extends State<SubmitScreen> {
           Row(children: [
             IconButton(
                 onPressed: () => Navigator.pop(ctx),
-                icon:
-                    const Icon(Icons.arrow_forward_ios, size: 18, color: cDark)),
+                icon: const Icon(Icons.arrow_back_ios, size: 18, color: cDark)),
             const Spacer(),
             const Text('إضافة مكان جديد',
                 style: TextStyle(
@@ -141,7 +140,8 @@ class _SubmitScreenState extends State<SubmitScreen> {
           _input(_name, 'مثال: مطعم لوسين'),
           const SizedBox(height: 16),
           _label('المدينة'),
-          _pills(['الرياض', 'جدة', 'الدمام'], _city, (v) => setState(() => _city = v)),
+          _pills(
+              ['الرياض', 'جدة', 'الدمام'], _city, (v) => setState(() => _city = v)),
           const SizedBox(height: 16),
           _label('نوع المكان'),
           _pills(types.keys.toList(), _type, (v) => setState(() => _type = v),
@@ -171,10 +171,10 @@ class _SubmitScreenState extends State<SubmitScreen> {
                             : Icons.circle_outlined,
                         color: on ? c : cGrey,
                         size: 19),
-                    const Spacer(),
-                    Flexible(
+                    const SizedBox(width: 10),
+                    Expanded(
                       child: Text(e.value,
-                          textAlign: TextAlign.right,
+                          textAlign: TextAlign.start,
                           style: TextStyle(
                               fontSize: 13,
                               fontWeight:
@@ -200,7 +200,7 @@ class _SubmitScreenState extends State<SubmitScreen> {
             child: TextField(
               controller: _note,
               maxLines: 3,
-              textAlign: TextAlign.right,
+              textAlign: TextAlign.start,
               decoration: const InputDecoration(
                   border: InputBorder.none,
                   hintText: 'الفرع، وما لاحظته عن التحضير...',
@@ -238,7 +238,7 @@ class _SubmitScreenState extends State<SubmitScreen> {
 
   Widget _label(String t) => Padding(
         padding: const EdgeInsets.only(bottom: 6),
-        child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+        child: Row(children: [
           Text(t,
               style: const TextStyle(
                   fontSize: 13, fontWeight: FontWeight.w700, color: cDark)),
@@ -254,7 +254,7 @@ class _SubmitScreenState extends State<SubmitScreen> {
             border: Border.all(color: cBorder)),
         child: TextField(
           controller: c,
-          textAlign: TextAlign.right,
+          textAlign: TextAlign.start,
           decoration: InputDecoration(
               border: InputBorder.none,
               hintText: hint,
@@ -266,27 +266,26 @@ class _SubmitScreenState extends State<SubmitScreen> {
   Widget _pills(List<String> keys, String sel, ValueChanged<String> onTap,
           {Map<String, String>? labels}) =>
       Row(
-          mainAxisAlignment: MainAxisAlignment.end,
           children: keys.map((k) {
-            final on = k == sel;
-            return Padding(
-              padding: const EdgeInsets.only(left: 8),
-              child: GestureDetector(
-                onTap: () => onTap(k),
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 18, vertical: 9),
-                  decoration: BoxDecoration(
-                      color: on ? cGreen : Colors.white,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: on ? cGreen : cBorder)),
-                  child: Text(labels?[k] ?? k,
-                      style: TextStyle(
-                          color: on ? Colors.white : cDark,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600)),
-                ),
-              ),
-            );
-          }).toList());
+        final on = k == sel;
+        return Padding(
+          padding: const EdgeInsetsDirectional.only(end: 8),
+          child: GestureDetector(
+            onTap: () => onTap(k),
+            child: Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 18, vertical: 9),
+              decoration: BoxDecoration(
+                  color: on ? cGreen : Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: on ? cGreen : cBorder)),
+              child: Text(labels?[k] ?? k,
+                  style: TextStyle(
+                      color: on ? Colors.white : cDark,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600)),
+            ),
+          ),
+        );
+      }).toList());
 }

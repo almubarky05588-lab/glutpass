@@ -113,7 +113,6 @@ class _DetailsScreenState extends State<DetailsScreen> {
     if (ok == true && mounted) setState(() => _f = _load());
   }
 
-
   @override
   Widget build(BuildContext ctx) {
     return Scaffold(
@@ -134,10 +133,9 @@ class _DetailsScreenState extends State<DetailsScreen> {
             const SizedBox(height: 16),
             _blocks(rating, rc),
             const SizedBox(height: 20),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: const Row(children: [
-                Spacer(),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 20),
+              child: Row(children: [
                 Text('أطباق موصى بها من المجتمع',
                     style: TextStyle(
                         fontSize: 16,
@@ -187,7 +185,7 @@ class _DetailsScreenState extends State<DetailsScreen> {
             Row(children: [
               IconButton(
                   onPressed: () => Navigator.pop(ctx),
-                  icon: const Icon(Icons.arrow_forward_ios,
+                  icon: const Icon(Icons.arrow_back_ios,
                       size: 18, color: Colors.white)),
               const Spacer(),
               const Text('تفاصيل المطعم',
@@ -209,24 +207,29 @@ class _DetailsScreenState extends State<DetailsScreen> {
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(20)),
               child: Row(children: [
-                const Spacer(),
-                Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                  Text(_p.nameAr,
-                      style: const TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w700,
-                          color: cDark)),
-                  if (_p.nameEn != null)
-                    Text(_p.nameEn!,
-                        style: const TextStyle(fontSize: 12, color: cGrey)),
-                  const SizedBox(height: 6),
-                  Text(x['address'] as String? ?? _p.branch ?? '',
-                      style: const TextStyle(fontSize: 12, color: cGrey)),
-                  const SizedBox(height: 8),
-                  SafetyBadge(_p),
-                ]),
-                const SizedBox(width: 12),
                 PlaceAvatar(_p, size: 64),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(_p.nameAr,
+                            style: const TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.w700,
+                                color: cDark)),
+                        if (_p.nameEn != null)
+                          Text(_p.nameEn!,
+                              style:
+                                  const TextStyle(fontSize: 12, color: cGrey)),
+                        const SizedBox(height: 6),
+                        Text(x['address'] as String? ?? _p.branch ?? '',
+                            style:
+                                const TextStyle(fontSize: 12, color: cGrey)),
+                        const SizedBox(height: 8),
+                        SafetyBadge(_p),
+                      ]),
+                ),
               ]),
             ),
           ]),
@@ -300,10 +303,13 @@ class _DetailsScreenState extends State<DetailsScreen> {
             border: Border.all(color: cBorder)),
         child: Column(children: [
           Row(children: [
-            const Spacer(),
-            Text(d.nameAr,
-                style: const TextStyle(
-                    fontSize: 15, fontWeight: FontWeight.w700, color: cDark)),
+            Expanded(
+              child: Text(d.nameAr,
+                  style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: cDark)),
+            ),
           ]),
           const SizedBox(height: 8),
           Row(children: [
@@ -316,12 +322,12 @@ class _DetailsScreenState extends State<DetailsScreen> {
                       color: d.fg, fontSize: 11, fontWeight: FontWeight.w700)),
             ),
             const Spacer(),
-            Text('· ${d.votes} تجربة',
-                style: const TextStyle(fontSize: 11.5, color: cGrey)),
-            const SizedBox(width: 10),
             Text('${d.price?.toStringAsFixed(0) ?? '—'} ريال',
                 style: const TextStyle(
                     fontSize: 13, fontWeight: FontWeight.w700, color: cGreen)),
+            const SizedBox(width: 10),
+            Text('· ${d.votes} تجربة',
+                style: const TextStyle(fontSize: 11.5, color: cGrey)),
           ]),
         ]),
       );
