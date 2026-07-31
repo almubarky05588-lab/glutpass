@@ -72,7 +72,7 @@ jobs:
             || /usr/libexec/PlistBuddy -c "Set :aps-environment production" "$ENT"
           /usr/libexec/PlistBuddy -c "Print" "$ENT"
           python3 - <<'PY'
-          import re, pathlib
+          import pathlib
           p = pathlib.Path('ios/Runner.xcodeproj/project.pbxproj')
           s = p.read_text()
           if 'CODE_SIGN_ENTITLEMENTS' not in s:
@@ -106,10 +106,15 @@ jobs:
 
           platform :ios do
             lane :beta do
+              # المسار المطلق ضروري: fastlane يعمل من داخل ios/fastlane
+              # بينما المفتاح في ios/keys — والمسار النسبي كان يفشل بصمت
+              key_path = File.expand_path("../keys/AuthKey.p8", __dir__)
+              UI.important("مسار المفتاح: #{key_path} — موجود: #{File.exist?(key_path)}")
+
               api_key = app_store_connect_api_key(
                 key_id: ENV["ASC_KEY_ID"],
                 issuer_id: ENV["ASC_ISSUER_ID"],
-                key_filepath: "./keys/AuthKey.p8",
+                key_filepath: key_path,
                 in_house: false
               )
 
@@ -120,7 +125,7 @@ jobs:
                 Spaceship::ConnectAPI.token = Spaceship::ConnectAPI::Token.create(
                   key_id: ENV["ASC_KEY_ID"],
                   issuer_id: ENV["ASC_ISSUER_ID"],
-                  filepath: File.absolute_path("./keys/AuthKey.p8")
+                  filepath: key_path
                 )
                 all = Spaceship::ConnectAPI::Certificate.all
                 UI.important("إجمالي الشهادات: #{all.count}")
