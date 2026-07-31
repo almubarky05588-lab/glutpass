@@ -85,6 +85,47 @@ jobs:
               print('already linked')
           PY
 
+      - name: Custom AppDelegate for push
+        run: |
+          cat > ios/Runner/AppDelegate.swift <<'SWIFT'
+          import Flutter
+          import UIKit
+          import FirebaseMessaging
+
+          @main
+          @objc class AppDelegate: FlutterAppDelegate {
+            override func application(
+              _ application: UIApplication,
+              didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
+            ) -> Bool {
+              GeneratedPluginRegistrant.register(with: self)
+              // نطلب التسجيل صراحةً بدل انتظار أن يفعلها أحد
+              application.registerForRemoteNotifications()
+              return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+            }
+
+            // نسلّم رمز آبل لـFirebase يداً بيد فور وصوله
+            override func application(
+              _ application: UIApplication,
+              didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
+            ) {
+              Messaging.messaging().apnsToken = deviceToken
+              super.application(application,
+                didRegisterForRemoteNotificationsWithDeviceToken: deviceToken)
+            }
+
+            override func application(
+              _ application: UIApplication,
+              didFailToRegisterForRemoteNotificationsWithError error: Error
+            ) {
+              NSLog("APNs registration failed: \(error.localizedDescription)")
+              super.application(application,
+                didFailToRegisterForRemoteNotificationsWithError: error)
+            }
+          }
+          SWIFT
+          cat ios/Runner/AppDelegate.swift
+
       - run: flutter pub get
 
       - name: Set build number
