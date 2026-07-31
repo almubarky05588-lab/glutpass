@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../core.dart';
 import '../push.dart';
 import 'details.dart';
+import 'onboarding.dart';
 
 class AccountScreen extends StatefulWidget {
   const AccountScreen({super.key});
@@ -733,7 +734,7 @@ class _AccountScreenState extends State<AccountScreen> {
         padding: const EdgeInsets.all(20),
         children: [
           const SizedBox(height: 20),
-          const Icon(Icons.eco, color: cGreen, size: 52),
+          const Center(child: GlutMark(width: 44)),
           const SizedBox(height: 12),
           Text(_signup ? 'انضم إلى مجتمع GlutPass' : 'مرحباً بعودتك',
               textAlign: TextAlign.center,
