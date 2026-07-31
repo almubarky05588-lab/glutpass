@@ -602,6 +602,110 @@ async function vNotif(){
       await sb.from('notification_campaigns').delete().eq('id',d.dataset.id); vNotif(); }
   };
 }
+TABS.push(['rules','الكلمات والمدن']);
+render = function(){
+  $('#ttl').textContent=TABS.find(t=>t[0]===tab)[1];
+  $('#view').innerHTML='<p class="muted">جارِ التحميل…</p>';
+  ({home:vHome,content:vContent,banners:vBanners,subs:vSubs,
+    places:vPlaces,mod:vMod,notif:vNotif,rules:vRules})[tab]();
+};
+
+async function vRules(){
+  const me = (await sb.auth.getUser()).data.user;
+  const { data:mp } = await sb.from('profiles').select('role').eq('id',me.id).maybeSingle();
+  const isAdmin = mp?.role === 'admin';
+  const [bw,ct,held] = await Promise.all([
+    sb.from('banned_words').select('*').order('created_at',{ascending:false}),
+    sb.from('cities').select('*').order('sort_order').order('name_ar'),
+    sb.from('place_submissions').select('id').eq('status','pending')]);
+  const W=bw.data||[], C=ct.data||[], H=(held.data||[]).length;
+
+  $('#view').innerHTML=`
+  <div class="${H?'warn':'ok'}" style="${H?'':'background:var(--greenLt);color:var(--green)'}">
+    ${H?`⚠ ${H} إضافة محجوزة بانتظارك في تبويب «المساهمات» — رُصدت فيها كلمة محظورة.`
+       :'✓ لا توجد إضافات محجوزة — كل ما أضافه المستخدمون نُشر مباشرة.'}</div>
+
+  <div class="grid">
+    <div class="card"><b>الكلمات المحظورة (${W.length})</b>
+      <p class="muted" style="margin:4px 0 14px">
+        أي إضافة يكتب فيها المستخدم إحدى هذه الكلمات لا تُنشر، بل تُحجز للإشراف.
+        الفحص يتجاهل التشكيل ويوحّد الهمزات والتاء المربوطة —
+        لكنه يطابق الكلمة كوحدة، فأضف الصيغة الملتصقة والمفصولة إن لزم.</p>
+      ${isAdmin?`<div class="row" style="margin-bottom:14px">
+        <input id="bwv" placeholder="اكتب الكلمة…" style="flex:1;min-width:160px">
+        <button class="btn" id="bwa">إضافة</button></div>
+        <p id="bwm" style="font-size:12px;margin-bottom:10px"></p>`
+        :'<p class="muted" style="margin-bottom:10px">الإضافة والحذف للمدير فقط</p>'}
+      ${W.length?`<table><thead><tr><th>الكلمة</th><th>المعيار</th><th>الحالة</th>
+        ${isAdmin?'<th>إجراء</th>':''}</tr></thead><tbody>
+        ${W.map(w=>`<tr><td><b>${esc(w.word)}</b></td>
+          <td class="muted">${esc(w.word_norm)}</td>
+          <td>${w.is_active
+            ?'<span class="pill" style="color:var(--red);background:var(--redLt)">نشطة</span>'
+            :'<span class="pill" style="color:var(--grey);background:var(--bg)">موقوفة</span>'}</td>
+          ${isAdmin?`<td>
+            <button class="btn sec wt" data-id="${w.id}" data-a="${w.is_active}">${w.is_active?'إيقاف':'تفعيل'}</button>
+            <button class="btn dgr wd" data-id="${w.id}">حذف</button></td>`:''}
+          </tr>`).join('')}</tbody></table>`
+        :'<p class="muted">لا توجد كلمات محظورة — كل الإضافات ستُنشر مباشرة</p>'}</div>
+
+    <div class="card"><b>المدن (${C.length})</b>
+      <p class="muted" style="margin:4px 0 14px">
+        تظهر في التطبيق فوراً بلا تحديث. المستخدم يستطيع إضافة مدينة جديدة،
+        ولا تتكرر لأن المطابقة تتم على المعيار — «جدة» و«جده» واحدة.</p>
+      ${isAdmin?`<div class="row" style="margin-bottom:14px">
+        <input id="ctv" placeholder="اسم المدينة…" style="flex:1;min-width:160px">
+        <button class="btn" id="cta">إضافة</button></div>
+        <p id="ctm" style="font-size:12px;margin-bottom:10px"></p>`:''}
+      <table><thead><tr><th>المدينة</th><th>المعيار</th><th>الحالة</th>
+        ${isAdmin?'<th>إجراء</th>':''}</tr></thead><tbody>
+        ${C.map(c=>`<tr><td><b>${esc(c.name_ar)}</b></td>
+          <td class="muted">${esc(c.name_norm)}</td>
+          <td>${c.is_active
+            ?'<span class="pill" style="color:var(--green);background:var(--greenLt)">ظاهرة</span>'
+            :'<span class="pill" style="color:var(--grey);background:var(--bg)">مخفية</span>'}</td>
+          ${isAdmin?`<td>
+            <button class="btn sec ct" data-id="${c.id}" data-a="${c.is_active}">${c.is_active?'إخفاء':'إظهار'}</button>
+            <button class="btn dgr cd" data-id="${c.id}" data-n="${esc(c.name_ar)}">حذف</button></td>`:''}
+          </tr>`).join('')}</tbody></table></div>
+  </div>`;
+
+  if(isAdmin){
+    const bwm=(t,c)=>{const x=$('#bwm');x.textContent=t;x.style.color=c;};
+    $('#bwa').onclick = async () => {
+      const v=$('#bwv').value.trim();
+      if(!v) return bwm('اكتب الكلمة','var(--red)');
+      const { error } = await sb.from('banned_words').insert({ word:v });
+      if(error) return bwm(error.code==='23505'?'الكلمة مضافة مسبقاً':error.message,'var(--red)');
+      vRules();
+    };
+    $('#bwv').onkeydown = e => { if(e.key==='Enter') $('#bwa').click(); };
+
+    const ctm=(t,c)=>{const x=$('#ctm');x.textContent=t;x.style.color=c;};
+    $('#cta').onclick = async () => {
+      const v=$('#ctv').value.trim();
+      if(!v) return ctm('اكتب اسم المدينة','var(--red)');
+      const { error } = await sb.from('cities').insert({ name_ar:v, created_by:me.id });
+      if(error) return ctm(error.code==='23505'?'المدينة مضافة مسبقاً':error.message,'var(--red)');
+      vRules();
+    };
+    $('#ctv').onkeydown = e => { if(e.key==='Enter') $('#cta').click(); };
+  }
+
+  $('#view').onclick = async e => {
+    const wt=e.target.closest('.wt'), wd=e.target.closest('.wd'),
+          ct2=e.target.closest('.ct'), cd=e.target.closest('.cd');
+    if(wt){ await sb.from('banned_words').update({is_active:wt.dataset.a!=='true'}).eq('id',wt.dataset.id); vRules(); }
+    if(wd && confirm('حذف هذه الكلمة نهائياً؟')){
+      await sb.from('banned_words').delete().eq('id',wd.dataset.id); vRules(); }
+    if(ct2){ await sb.from('cities').update({is_active:ct2.dataset.a!=='true'}).eq('id',ct2.dataset.id); vRules(); }
+    if(cd){
+      if(!confirm('حذف «'+cd.dataset.n+'»؟ الأماكن المسجّلة فيها تبقى كما هي.\nالأفضل عادةً إخفاؤها بدل حذفها.')) return;
+      const { error } = await sb.from('cities').delete().eq('id',cd.dataset.id);
+      if(error) alert(error.message);
+      vRules(); }
+  };
+}
 
 sb.auth.getSession().then(({data})=>{ if(data.session) boot(); });
 </script>
