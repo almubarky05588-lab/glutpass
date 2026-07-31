@@ -63,7 +63,7 @@ class Cities {
 
 class Place {
   final String id, nameAr, safety;
-  final String? nameEn, cuisine, branch, note, logoLetter, logoColor;
+  final String? nameEn, cuisine, branch, note, logoLetter, logoColor, logoUrl;
   final double? pct;
   final int votes, dishes;
 
@@ -76,6 +76,7 @@ class Place {
         note = m['short_note'] as String?,
         logoLetter = m['logo_letter'] as String?,
         logoColor = m['logo_color'] as String?,
+        logoUrl = m['logo_url'] as String?,
         safety = m['effective_safety_status'] as String,
         pct = (m['safe_experience_pct'] as num?)?.toDouble(),
         votes = (m['safety_votes_count'] as num?)?.toInt() ?? 0,
@@ -83,7 +84,7 @@ class Place {
 
   static const cols =
       'id,name_ar,name_en,cuisine,branch_label,short_note,logo_letter,'
-      'logo_color,effective_safety_status,safe_experience_pct,'
+      'logo_color,logo_url,effective_safety_status,safe_experience_pct,'
       'safety_votes_count,dishes_count';
 
   bool get isSafe => safety == 'SEPARATE_PREP';
@@ -174,6 +175,19 @@ class PlaceAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final url = place.logoUrl;
+    if (url != null && url.trim().isNotEmpty) {
+      return Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: cBg,
+          border: Border.all(color: cBorder),
+          image: DecorationImage(image: NetworkImage(url), fit: BoxFit.cover),
+        ),
+      );
+    }
     return Container(
       width: size,
       height: size,
