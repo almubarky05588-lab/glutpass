@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>GlutPass — المستخدمون</title>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{--green:#146C43;--greenLt:#E8F3E4;--dark:#152018;--grey:#9AA79E;
+--border:#E5EAE5;--bg:#F4F6F4;--amber:#C2770F;--amberLt:#FDF0E0;
+--red:#C0392B;--redLt:#FCE7E4;--blue:#2A5A99;--blueLt:#E6EDF7}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Tajawal,sans-serif;background:var(--bg);color:var(--dark)}
+button{font-family:inherit;cursor:pointer;border:none}
+[hidden]{display:none!important}
+input,select{font-family:inherit;width:100%;padding:10px 12px;border:1px solid var(--border);
+border-radius:9px;background:#fff;font-size:14px;color:var(--dark)}
+.btn{padding:9px 16px;border-radius:9px;font-size:12.5px;font-weight:700;background:var(--green);color:#fff}
+.btn.sec{background:#fff;color:var(--dark);border:1px solid var(--border)}
+.btn.dgr{background:var(--redLt);color:var(--red)}
+.pill{display:inline-block;padding:4px 11px;border-radius:12px;font-size:11px;font-weight:700}
+.card{background:#fff;border:1px solid var(--border);border-radius:16px;padding:20px}
+.muted{color:var(--grey);font-size:12px}
+.row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.sp{flex:1}
+header{background:#fff;border-bottom:1px solid var(--border);padding:16px 24px;display:flex;
+align-items:center;gap:12px;flex-wrap:wrap}
+header h2{font-size:18px}
+.wrap{padding:22px 24px;max-width:1200px;margin:0 auto}
+table{width:100%;border-collapse:collapse}
+th{font-size:11px;color:var(--grey);text-align:right;padding:0 8px 10px;font-weight:700}
+td{padding:11px 8px;border-top:1px solid var(--border);font-size:13px;vertical-align:middle}
+.k{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:18px}
+.k .card{padding:15px}
+.k b{font-size:24px;display:block}
+#login{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+#login .card{width:100%;max-width:360px;text-align:center}
+.logo{width:48px;height:48px;border-radius:14px;background:var(--green);margin:0 auto;
+display:flex;align-items:center;justify-content:center;color:#fff;font-size:22px;font-weight:700}
+@media(max-width:820px){.wrap{padding:14px}.card{overflow-x:auto}table{min-width:640px}
+td,th{padding:9px 6px;font-size:12px}header{padding:12px 14px}}
+</style>
+</head>
+<body>
+
+<div id="login">
+  <div class="card">
+    <div class="logo">G</div>
+    <h2 style="margin:12px 0 4px;font-size:19px">إدارة المستخدمين</h2>
+    <p class="muted">الدخول للمشرفين فقط</p>
+    <div style="text-align:right;margin-top:14px">
+      <label class="muted">البريد</label><input id="em" type="email"></div>
+    <div style="text-align:right;margin-top:12px">
+      <label class="muted">كلمة المرور</label><input id="pw" type="password"></div>
+    <button class="btn" id="go" style="width:100%;margin-top:16px;padding:12px">دخول</button>
+    <p id="lerr" style="color:var(--red);font-size:12px;margin-top:12px"></p>
+  </div>
+</div>
+
+<div id="app" hidden>
+  <header>
+    <div class="logo" style="width:34px;height:34px;border-radius:11px;font-size:15px">G</div>
+    <h2>المستخدمون</h2>
+    <div class="sp"></div>
+    <span class="muted" id="who"></span>
+    <a href="./index.html" class="btn sec" style="text-decoration:none">اللوحة الرئيسية</a>
+    <button class="btn sec" id="out">خروج</button>
+  </header>
+  <div class="wrap">
+    <div class="k" id="stats"></div>
+
+    <div class="card" id="promoBox" style="margin-bottom:18px" hidden>
+      <b style="font-size:14px">ترقية مشرف جديد</b>
+      <p class="muted" style="margin:5px 0 12px">
+        لا يمكن إنشاء حساب من هنا — اطلب منه التسجيل من التطبيق أولاً، ثم رقّه ببريده.
+        <b>مدير</b> يملك كل شيء، و<b>مشرف</b> يراجع المحتوى دون إدارة الأدوار.</p>
+      <div class="row">
+        <input id="pe" placeholder="البريد الإلكتروني" style="flex:2;min-width:200px">
+        <select id="pr" style="flex:1;min-width:130px">
+          <option value="moderator">مشرف</option>
+          <option value="admin">مدير</option>
+          <option value="user">مستخدم عادي</option>
+        </select>
+        <button class="btn" id="pgo">تطبيق</button>
+      </div>
+      <p id="pmsg" style="font-size:12px;margin-top:10px"></p>
+    </div>
+
+    <div class="card">
+      <div class="row" style="margin-bottom:14px">
+        <b style="font-size:14px">القائمة</b>
+        <div class="sp"></div>
+        <input id="q" placeholder="ابحث بالاسم أو البريد…" style="max-width:280px">
+      </div>
+      <div id="tbl"><p class="muted">جارِ التحميل…</p></div>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+const URL='https://sreabyhmxetaynqqhlwe.supabase.co';
+const KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNyZWFieWhteGV0YXlucXFobHdlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUyNzA3MjgsImV4cCI6MjEwMDg0NjcyOH0.a-5aEWl7FY9Q0CTK7AJVYvLCrW2MXNybfFFqh23xxN0';
+const sb = createClient(URL, KEY);
+const $ = s => document.querySelector(s);
+const esc = s => String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const fdate = d => d ? new Date(d).toLocaleDateString('ar-SA') : '—';
+let myRole='moderator', myId=null;
+
+$('#go').onclick = async () => {
+  $('#lerr').textContent='';
+  const { error } = await sb.auth.signInWithPassword({
+    email:$('#em').value.trim(), password:$('#pw').value });
+  if (error) { $('#lerr').textContent = error.message || 'تعذّر الدخول'; return; }
+  boot();
+};
+$('#pw').onkeydown = e => { if(e.key==='Enter') $('#go').click(); };
+$('#out').onclick = async () => { await sb.auth.signOut(); location.reload(); };
+
+async function boot(){
+  const { data:{ user } } = await sb.auth.getUser();
+  if (!user) return;
+  myId = user.id;
+  const { data:p } = await sb.from('profiles').select('full_name,role').eq('id',user.id).maybeSingle();
+  if (!p || (p.role!=='admin' && p.role!=='moderator')) {
+    $('#lerr').textContent='هذا الحساب ليس مشرفاً.'; await sb.auth.signOut(); return; }
+  myRole = p.role;
+  $('#login').hidden=true; $('#app').hidden=false;
+  $('#who').textContent=(p.full_name||'مشرف')+' · '+(p.role==='admin'?'مدير النظام':'مشرف');
+  $('#promoBox').hidden = (myRole!=='admin');
+  loadStats(); loadUsers('');
+}
+
+async function loadStats(){
+  const { data, error } = await sb.rpc('admin_user_stats');
+  if (error || !data || !data.length) { $('#stats').innerHTML=''; return; }
+  const s = data[0];
+  const K=[['إجمالي المستخدمين',s.total,'var(--green)'],
+    ['مرضى سيلياك',s.celiac,'var(--green)'],
+    ['محظورون',s.banned,'var(--red)'],
+    ['الطاقم',s.admins,'var(--blue)'],
+    ['جدد خلال ٧ أيام',s.new_7d,'var(--amber)']];
+  $('#stats').innerHTML=K.map(k=>`<div class="card">
+    <b style="color:${k[2]}">${k[1]}</b><span class="muted">${k[0]}</span></div>`).join('');
+}
+
+let timer=null;
+$('#q').oninput = e => { clearTimeout(timer); const v=e.target.value;
+  timer=setTimeout(()=>loadUsers(v), 350); };
+
+async function loadUsers(q){
+  const { data, error } = await sb.rpc('admin_list_users', { p_search: q || null });
+  if (error) { $('#tbl').innerHTML=`<p style="color:var(--red);font-size:12px">${esc(error.message)}</p>`; return; }
+  const U = data || [];
+  if (!U.length) { $('#tbl').innerHTML='<p class="muted">لا نتائج</p>'; return; }
+  const RN={admin:'مدير',moderator:'مشرف',user:'مستخدم'};
+  $('#tbl').innerHTML=`<table><thead><tr>
+    <th>المستخدم</th><th>البريد</th><th>المدينة</th><th>الجنس</th><th>سيلياك</th>
+    <th>أصوات</th><th>إضافات</th><th>الدور</th><th>التسجيل</th><th>آخر دخول</th>
+    <th>الحالة</th><th>إجراء</th></tr></thead><tbody>
+    ${U.map(u=>`<tr>
+      <td><b>${esc(u.full_name||'مستخدم')}</b></td>
+      <td class="muted" style="direction:ltr;text-align:right">${esc(u.email)}</td>
+      <td>${esc(u.city||'—')}</td>
+      <td>${u.gender==='male'?'ذكر':u.gender==='female'?'أنثى':'—'}</td>
+      <td>${u.is_celiac?'<span class="pill" style="color:var(--green);background:var(--greenLt)">نعم</span>':'<span class="muted">—</span>'}</td>
+      <td><b>${u.votes_count}</b></td>
+      <td><b>${u.subs_count}</b></td>
+      <td>${RN[u.role]||u.role}</td>
+      <td class="muted">${fdate(u.created_at)}</td>
+      <td class="muted">${fdate(u.last_sign_in_at)}</td>
+      <td>${u.is_banned
+        ?'<span class="pill" style="color:var(--red);background:var(--redLt)">محظور</span>'
+        :'<span class="pill" style="color:var(--green);background:var(--greenLt)">نشط</span>'}</td>
+      <td>${myRole!=='admin' ? '<span class="muted">—</span>' : `
+        <button class="btn sec rn" data-id="${u.id}" data-n="${esc(u.full_name||'')}">اسم</button>
+        ${u.id===myId ? '' : `<button class="btn ${u.is_banned?'sec':'dgr'} bn"
+          data-id="${u.id}" data-b="${u.is_banned}">${u.is_banned?'رفع':'حظر'}</button>`}`}
+      </td></tr>`).join('')}
+    </tbody></table>`;
+}
+
+$('#tbl').onclick = async e => {
+  const b=e.target.closest('.bn'), r=e.target.closest('.rn');
+  if (b){
+    const ban = b.dataset.b!=='true';
+    if(!confirm(ban?'حظر هذا المستخدم؟ لن يستطيع التصويت أو إضافة أماكن.':'رفع الحظر؟')) return;
+    const { error } = await sb.rpc('admin_set_ban',{ p_user:b.dataset.id, p_banned:ban });
+    if (error) return alert(error.message);
+    loadStats(); loadUsers($('#q').value);
+  }
+  if (r){
+    const nm = prompt('الاسم الجديد:', r.dataset.n);
+    if (nm===null || !nm.trim()) return;
+    const { error } = await sb.rpc('admin_set_name',{ p_user:r.dataset.id, p_name:nm.trim() });
+    if (error) return alert(error.message);
+    loadUsers($('#q').value);
+  }
+};
+
+$('#pgo').onclick = async () => {
+  const m=$('#pmsg'), em=$('#pe').value.trim();
+  m.style.color='var(--grey)'; m.textContent='جارِ التنفيذ…';
+  if(!em){ m.style.color='var(--red)'; m.textContent='اكتب البريد'; return; }
+  const { error } = await sb.rpc('admin_set_role',{ p_email:em, p_role:$('#pr').value });
+  if (error){ m.style.color='var(--red)'; m.textContent=error.message; return; }
+  m.style.color='var(--green)'; m.textContent='✓ تم تحديث الدور';
+  $('#pe').value='';
+  loadStats(); loadUsers($('#q').value);
+};
+
+sb.auth.getSession().then(({data})=>{ if(data.session) boot(); });
+</script>
+</body>
+</html>
