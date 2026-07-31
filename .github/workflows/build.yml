@@ -99,12 +99,10 @@ jobs:
               didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
             ) -> Bool {
               GeneratedPluginRegistrant.register(with: self)
-              // نطلب التسجيل صراحةً بدل انتظار أن يفعلها أحد
               application.registerForRemoteNotifications()
               return super.application(application, didFinishLaunchingWithOptions: launchOptions)
             }
 
-            // نسلّم رمز آبل لـFirebase يداً بيد فور وصوله
             override func application(
               _ application: UIApplication,
               didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
@@ -128,6 +126,29 @@ jobs:
 
       - run: flutter pub get
 
+      - name: Generate app icon and launch screen
+        run: |
+          test -f assets/brand/app_icon.png || { echo "assets/brand/app_icon.png مفقود"; exit 1; }
+          test -f assets/brand/splash.png   || { echo "assets/brand/splash.png مفقود"; exit 1; }
+          dart run flutter_launcher_icons
+          dart run flutter_native_splash:create
+          echo "الأيقونات المولدة:"
+          ls -1 ios/Runner/Assets.xcassets/AppIcon.appiconset/
+          echo "شاشة البداية:"
+          ls -1 ios/Runner/Assets.xcassets/LaunchImage.imageset/
+          python3 - <<'PY'
+          import struct, pathlib
+          p = pathlib.Path('ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-1024x1024@1x.png')
+          if p.exists():
+              b = p.read_bytes()
+              w, h, depth, ctype = struct.unpack('>IIBB', b[16:26])
+              print(f'store icon: {w}x{h} colorType={ctype}')
+              assert (w, h) == (1024, 1024), 'store icon size wrong'
+              assert ctype in (0, 2, 3), 'store icon has alpha channel'
+          else:
+              print('1024 icon not found under expected name')
+          PY
+
       - name: Set build number
         run: echo "BUILD_NUMBER=$(( ${{ github.run_number }} + 300 ))" >> $GITHUB_ENV
 
@@ -147,8 +168,6 @@ jobs:
 
           platform :ios do
             lane :beta do
-              # المسار المطلق ضروري: fastlane يعمل من داخل ios/fastlane
-              # بينما المفتاح في ios/keys — والمسار النسبي كان يفشل بصمت
               key_path = File.expand_path("../keys/AuthKey.p8", __dir__)
               UI.important("مسار المفتاح: #{key_path} — موجود: #{File.exist?(key_path)}")
 
@@ -159,7 +178,6 @@ jobs:
                 in_house: false
               )
 
-              # حذف شهادات التوزيع القديمة — الخادم جديد كل مرة ولا يملك مفاتيحها
               begin
                 require 'spaceship'
                 UI.important("=== بدء تنظيف الشهادات ===")
@@ -251,4 +269,4 @@ jobs:
           fastlane beta
 
       - name: Done
-        run: echo "✅ رُفع إلى TestFlight"
+        run: echo "رُفع إلى TestFlight"
