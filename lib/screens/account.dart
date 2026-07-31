@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../core.dart';
@@ -19,7 +20,7 @@ class _AccountScreenState extends State<AccountScreen> {
   bool _celiac = false;
   bool _signup = false;
   bool _busy = false;
-  bool _push = false;
+  bool _pushBusy = false;
   String? _msg;
   Map<String, dynamic>? _me;
   List<Place> _saved = [];
@@ -29,18 +30,9 @@ class _AccountScreenState extends State<AccountScreen> {
     super.initState();
     _city = Cities.all.isNotEmpty ? Cities.all.first : 'الرياض';
     _load();
-    _checkPush();
     Supabase.instance.client.auth.onAuthStateChange.listen((_) {
-      if (mounted) {
-        _load();
-        _checkPush();
-      }
+      if (mounted) _load();
     });
-  }
-
-  Future<void> _checkPush() async {
-    final v = await Push.isEnabled();
-    if (mounted) setState(() => _push = v);
   }
 
   Future<void> _load() async {
@@ -147,21 +139,62 @@ class _AccountScreenState extends State<AccountScreen> {
     ));
   }
 
-  // ــــــــ إعدادات الحساب ــــــــ
+  // ــــــــ الإشعارات ــــــــ
 
-  Future<void> _togglePush() async {
-    if (_push) {
-      _toast('لإيقاف الإشعارات: إعدادات الجهاز ← GlutPass ← الإشعارات');
-      return;
-    }
-    final ok = await Push.register();
-    await _checkPush();
-    if (ok) {
-      _toast('فُعّلت الإشعارات', ok: true);
+  Future<void> _pushTap() async {
+    setState(() => _pushBusy = true);
+    await Push.ensure();
+    if (!mounted) return;
+    setState(() => _pushBusy = false);
+    if (Push.saved) {
+      _toast('الإشعارات جاهزة', ok: true);
     } else {
-      _toast('لم يُمنح الإذن — فعّله من إعدادات الجهاز');
+      _showDiag();
     }
   }
+
+  void _showDiag() {
+    showDialog<void>(
+      context: context,
+      builder: (dctx) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        title: const Text('تشخيص الإشعارات',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+        content: SingleChildScrollView(
+          child: SelectableText(
+            Push.report(),
+            textAlign: TextAlign.start,
+            style: const TextStyle(
+                fontSize: 12.5, color: cDark, height: 1.8),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Clipboard.setData(ClipboardData(text: Push.report()));
+              Navigator.pop(dctx);
+              _toast('نُسخ التقرير', ok: true);
+            },
+            child: const Text('نسخ', style: TextStyle(color: cGreen)),
+          ),
+          TextButton(
+              onPressed: () => Navigator.pop(dctx),
+              child: const Text('إغلاق', style: TextStyle(color: cGrey))),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: cGreen),
+            onPressed: () {
+              Navigator.pop(dctx);
+              _pushTap();
+            },
+            child: const Text('إعادة المحاولة'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ــــــــ إعدادات الحساب ــــــــ
 
   Future<void> _pickAvatar(ImageSource src) async {
     final c = Supabase.instance.client;
@@ -544,35 +577,57 @@ class _AccountScreenState extends State<AccountScreen> {
         ),
       );
 
-  Widget _pushRow() => InkWell(
-        onTap: _togglePush,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-          child: Row(children: [
-            Icon(_push ? Icons.notifications_active : Icons.notifications_off,
-                size: 19, color: _push ? cGreen : cGrey),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('الإشعارات',
-                        style: TextStyle(fontSize: 11, color: cGrey)),
+  Widget _pushRow() {
+    final ok = Push.saved;
+    return InkWell(
+      onTap: _pushBusy ? null : _pushTap,
+      onLongPress: _showDiag,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+        child: Row(children: [
+          Icon(ok ? Icons.notifications_active : Icons.notifications_off,
+              size: 19, color: ok ? cGreen : cGrey),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('الإشعارات',
+                      style: TextStyle(fontSize: 11, color: cGrey)),
+                  const SizedBox(height: 2),
+                  Text(
+                      ok
+                          ? 'مفعّلة — جهازك مسجّل'
+                          : _pushBusy
+                              ? 'جارِ التسجيل…'
+                              : 'غير مكتملة — اضغط للمحاولة',
+                      style: TextStyle(
+                          fontSize: 13.5,
+                          color: ok ? cGreen : cDark,
+                          fontWeight: FontWeight.w600)),
+                  if (!ok && !_pushBusy) ...[
                     const SizedBox(height: 2),
-                    Text(_push ? 'مفعّلة' : 'موقوفة — اضغط للتفعيل',
-                        style: TextStyle(
-                            fontSize: 13.5,
-                            color: _push ? cGreen : cDark,
-                            fontWeight: FontWeight.w600)),
-                  ]),
-            ),
-            if (_push)
-              const Icon(Icons.check_circle, size: 18, color: cGreen)
-            else
-              const Icon(Icons.arrow_back_ios, size: 14, color: cGrey),
-          ]),
-        ),
-      );
+                    Text(Push.step,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 10.5, color: cAmber)),
+                  ],
+                ]),
+          ),
+          if (_pushBusy)
+            const SizedBox(
+                width: 18,
+                height: 18,
+                child:
+                    CircularProgressIndicator(color: cGreen, strokeWidth: 2))
+          else if (ok)
+            const Icon(Icons.check_circle, size: 18, color: cGreen)
+          else
+            const Icon(Icons.refresh, size: 18, color: cGrey),
+        ]),
+      ),
+    );
+  }
 
   Widget _genderRow() {
     final g = _me?['gender'] as String?;
