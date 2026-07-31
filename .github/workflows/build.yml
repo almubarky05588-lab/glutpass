@@ -39,7 +39,6 @@ jobs:
 
       - run: flutter analyze --no-fatal-infos --no-fatal-warnings
 
-      # رقم بناء فريد لكل رفع
       - name: Set build number
         run: |
           BN=$(( ${{ github.run_number }} + 100 ))
@@ -49,7 +48,6 @@ jobs:
       - name: Build unsigned archive
         run: flutter build ios --release --no-codesign --build-number=${{ env.BUILD_NUMBER }}
 
-      # مفتاح App Store Connect
       - name: Write API key
         run: |
           mkdir -p ~/private_keys
@@ -81,12 +79,15 @@ jobs:
             -scheme Runner \
             -configuration Release \
             -archivePath $PWD/build/Runner.xcarchive \
+            -destination "generic/platform=iOS" \
             -allowProvisioningUpdates \
             -authenticationKeyPath ~/private_keys/AuthKey_${ASC_KEY_ID}.p8 \
             -authenticationKeyID ${ASC_KEY_ID} \
             -authenticationKeyIssuerID ${ASC_ISSUER_ID} \
             DEVELOPMENT_TEAM=${TEAM_ID} \
             PRODUCT_BUNDLE_IDENTIFIER=${{ env.BUNDLE_ID }} \
+            CODE_SIGN_STYLE=Automatic \
+            CODE_SIGN_IDENTITY="Apple Distribution" \
             archive
 
           xcodebuild -exportArchive \
