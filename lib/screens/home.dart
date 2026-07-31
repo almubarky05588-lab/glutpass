@@ -108,4 +108,166 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _pad(Widget w) =>
       Padding(padding: const EdgeInsets.symmetric(horizontal: 20), child: w);
+
+Widget _header() => Container(
+        height: 96,
+        color: cGreen,
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        child: Row(children: [
+          Container(
+              width: 46,
+              height: 46,
+              decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(14)),
+              child: const Icon(Icons.eco, color: cGreen, size: 26)),
+          const SizedBox(width: 10),
+          const Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text('GlutPass',
+                    style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700)),
+                SizedBox(height: 2),
+                Text('مجتمع خالي من الجلوتين',
+                    style: TextStyle(color: Colors.white70, fontSize: 12)),
+              ]),
+          const Spacer(),
+          Container(
+              width: 46,
+              height: 46,
+              decoration: BoxDecoration(
+                  color: Colors.white24,
+                  borderRadius: BorderRadius.circular(14)),
+              child: const Icon(Icons.person_outline,
+                  color: Colors.white, size: 22)),
+        ]),
+      );
+
+  Widget _bar(BuildContext ctx) => GestureDetector(
+        onTap: () => Navigator.push(
+            ctx, MaterialPageRoute(builder: (_) => const SearchScreen())),
+        child: Container(
+          height: 48,
+          margin: const EdgeInsets.symmetric(horizontal: 20),
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: cBorder)),
+          child: const Row(children: [
+            Expanded(
+                child: Text('ابحث عن مطعم أو طبق...',
+                    style: TextStyle(color: cGrey, fontSize: 14))),
+            Icon(Icons.search, color: cGrey, size: 20),
+          ]),
+        ),
+      );
+
+  Widget _stat(String n, String l) => Expanded(
+        child: Container(
+          height: 52,
+          decoration: BoxDecoration(
+              color: cSafeBg, borderRadius: BorderRadius.circular(14)),
+          child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+            Text(n,
+                style: const TextStyle(
+                    color: cGreen, fontSize: 15, fontWeight: FontWeight.w700)),
+            Text(l, style: const TextStyle(color: cGreen, fontSize: 11)),
+          ]),
+        ),
+      );
+
+  Widget _note(Color bg, Color fg, IconData ic, String t) => Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+        decoration:
+            BoxDecoration(color: bg, borderRadius: BorderRadius.circular(10)),
+        child: Row(children: [
+          Icon(ic, color: fg, size: 14),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(t,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: fg, fontSize: 12)),
+          ),
+        ]),
+      );
+
+  Widget _chips() => SizedBox(
+        height: 36,
+        child: ListView.separated(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          itemCount: 4,
+          separatorBuilder: (_, __) => const SizedBox(width: 8),
+          itemBuilder: (_, i) {
+            final c = ['الكل', 'الرياض', 'جدة', 'الدمام'][i];
+            final on = c == _city;
+            return GestureDetector(
+              onTap: () => _pick(c),
+              child: Container(
+                alignment: Alignment.center,
+                padding: const EdgeInsets.symmetric(horizontal: 18),
+                decoration: BoxDecoration(
+                    color: on ? cGreen : Colors.white,
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(color: on ? cGreen : cBorder)),
+                child: Text(c,
+                    style: TextStyle(
+                        color: on ? Colors.white : cDark,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600)),
+              ),
+            );
+          },
+        ),
+      );
+
+  Widget _card(Place p) => GestureDetector(
+        onTap: () => _open(p),
+        child: Container(
+          margin: const EdgeInsets.fromLTRB(20, 0, 20, 10),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: cBorder)),
+          child: Row(children: [
+            PlaceAvatar(p),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(p.nameAr,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: cDark)),
+                    if (p.nameEn != null)
+                      Text(p.nameEn!,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 11, color: cGrey)),
+                    const SizedBox(height: 2),
+                    Text('${p.cuisine ?? ''} · ${p.branch ?? ''}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 12, color: cGrey)),
+                    const SizedBox(height: 5),
+                    RatingRow(p),
+                  ]),
+            ),
+            const SizedBox(width: 8),
+            SafetyBadge(p),
+          ]),
+        ),
+      );
 }
