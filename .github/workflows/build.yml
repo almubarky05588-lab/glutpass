@@ -8,10 +8,13 @@ on:
       - 'README.md'
   workflow_dispatch:
 
+env:
+  BUNDLE_ID: com.glutpass.glutpass
+
 jobs:
   ios:
     runs-on: macos-latest
-    timeout-minutes: 40
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
 
@@ -36,4 +39,82 @@ jobs:
 
       - run: flutter analyze --no-fatal-infos --no-fatal-warnings
 
-      - run: flutter build ios --release --no-codesign
+      # رقم بناء فريد لكل رفع
+      - name: Set build number
+        run: |
+          BN=$(( ${{ github.run_number }} + 100 ))
+          echo "BUILD_NUMBER=$BN" >> $GITHUB_ENV
+          echo "رقم البناء: $BN"
+
+      - name: Build unsigned archive
+        run: flutter build ios --release --no-codesign --build-number=${{ env.BUILD_NUMBER }}
+
+      # مفتاح App Store Connect
+      - name: Write API key
+        run: |
+          mkdir -p ~/private_keys
+          echo "${{ secrets.ASC_KEY_P8 }}" > ~/private_keys/AuthKey_${{ secrets.ASC_KEY_ID }}.p8
+          chmod 600 ~/private_keys/AuthKey_${{ secrets.ASC_KEY_ID }}.p8
+
+      - name: Archive and export
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          TEAM_ID: ${{ secrets.TEAM_ID }}
+        run: |
+          cd ios
+          cat > ExportOptions.plist <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>teamID</key><string>${TEAM_ID}</string>
+            <key>signingStyle</key><string>automatic</string>
+            <key>uploadSymbols</key><true/>
+            <key>destination</key><string>export</string>
+          </dict>
+          </plist>
+          EOF
+
+          xcodebuild -workspace Runner.xcworkspace \
+            -scheme Runner \
+            -configuration Release \
+            -archivePath $PWD/build/Runner.xcarchive \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath ~/private_keys/AuthKey_${ASC_KEY_ID}.p8 \
+            -authenticationKeyID ${ASC_KEY_ID} \
+            -authenticationKeyIssuerID ${ASC_ISSUER_ID} \
+            DEVELOPMENT_TEAM=${TEAM_ID} \
+            PRODUCT_BUNDLE_IDENTIFIER=${{ env.BUNDLE_ID }} \
+            archive
+
+          xcodebuild -exportArchive \
+            -archivePath $PWD/build/Runner.xcarchive \
+            -exportOptionsPlist ExportOptions.plist \
+            -exportPath $PWD/build/ipa \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath ~/private_keys/AuthKey_${ASC_KEY_ID}.p8 \
+            -authenticationKeyID ${ASC_KEY_ID} \
+            -authenticationKeyIssuerID ${ASC_ISSUER_ID}
+
+      - name: Upload to TestFlight
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: |
+          IPA=$(ls ios/build/ipa/*.ipa | head -n 1)
+          echo "الملف: $IPA"
+          xcrun altool --upload-app -f "$IPA" -t ios \
+            --apiKey ${ASC_KEY_ID} \
+            --apiIssuer ${ASC_ISSUER_ID}
+
+      - name: Done
+        run: echo "✅ رُفع إلى TestFlight — المعالجة تستغرق ٥ إلى ٣٠ دقيقة"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ipa
+          path: ios/build/ipa/*.ipa
+          if-no-files-found: ignore
