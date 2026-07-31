@@ -4,6 +4,7 @@ import '../core.dart';
 import '../promo.dart';
 import 'search.dart';
 import 'details.dart';
+import 'onboarding.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -123,7 +124,7 @@ class _HomeScreenState extends State<HomeScreen> {
               decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(14)),
-              child: const Icon(Icons.eco, color: cGreen, size: 26)),
+              child: const Center(child: GlutMark(width: 24))),
           const SizedBox(width: 10),
           const Column(
               crossAxisAlignment: CrossAxisAlignment.start,
