@@ -43,9 +43,8 @@ jobs:
         run: |
           BN=$(( ${{ github.run_number }} + 100 ))
           echo "BUILD_NUMBER=$BN" >> $GITHUB_ENV
-          echo "رقم البناء: $BN"
 
-      - name: Build unsigned archive
+      - name: Build unsigned
         run: flutter build ios --release --no-codesign --build-number=${{ env.BUILD_NUMBER }}
 
       - name: Write API key
@@ -54,7 +53,41 @@ jobs:
           echo "${{ secrets.ASC_KEY_P8 }}" > ~/private_keys/AuthKey_${{ secrets.ASC_KEY_ID }}.p8
           chmod 600 ~/private_keys/AuthKey_${{ secrets.ASC_KEY_ID }}.p8
 
-      - name: Archive and export
+      # نكتب إعدادات التوقيع داخل المشروع مباشرة
+      - name: Configure signing
+        env:
+          TEAM_ID: ${{ secrets.TEAM_ID }}
+        run: |
+          cd ios
+          cat > Flutter/Release.xcconfig <<EOF
+          #include "Generated.xcconfig"
+          CODE_SIGN_STYLE = Automatic
+          DEVELOPMENT_TEAM = ${TEAM_ID}
+          PRODUCT_BUNDLE_IDENTIFIER = ${{ env.BUNDLE_ID }}
+          CODE_SIGN_IDENTITY = Apple Distribution
+          CODE_SIGN_IDENTITY[sdk=iphoneos*] = Apple Distribution
+          EOF
+          cat Flutter/Release.xcconfig
+
+      - name: Archive
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          TEAM_ID: ${{ secrets.TEAM_ID }}
+        run: |
+          cd ios
+          xcodebuild -workspace Runner.xcworkspace \
+            -scheme Runner \
+            -configuration Release \
+            -archivePath $PWD/build/Runner.xcarchive \
+            -destination "generic/platform=iOS" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath ~/private_keys/AuthKey_${ASC_KEY_ID}.p8 \
+            -authenticationKeyID ${ASC_KEY_ID} \
+            -authenticationKeyIssuerID ${ASC_ISSUER_ID} \
+            archive
+
+      - name: Export IPA
         env:
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
@@ -74,21 +107,6 @@ jobs:
           </dict>
           </plist>
           EOF
-
-          xcodebuild -workspace Runner.xcworkspace \
-            -scheme Runner \
-            -configuration Release \
-            -archivePath $PWD/build/Runner.xcarchive \
-            -destination "generic/platform=iOS" \
-            -allowProvisioningUpdates \
-            -authenticationKeyPath ~/private_keys/AuthKey_${ASC_KEY_ID}.p8 \
-            -authenticationKeyID ${ASC_KEY_ID} \
-            -authenticationKeyIssuerID ${ASC_ISSUER_ID} \
-            DEVELOPMENT_TEAM=${TEAM_ID} \
-            PRODUCT_BUNDLE_IDENTIFIER=${{ env.BUNDLE_ID }} \
-            CODE_SIGN_STYLE=Automatic \
-            archive
-
           xcodebuild -exportArchive \
             -archivePath $PWD/build/Runner.xcarchive \
             -exportOptionsPlist ExportOptions.plist \
@@ -109,12 +127,4 @@ jobs:
             --apiKey ${ASC_KEY_ID} \
             --apiIssuer ${ASC_ISSUER_ID}
 
-      - name: Done
-        run: echo "✅ رُفع إلى TestFlight"
-
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: ipa
-          path: ios/build/ipa/*.ipa
-          if-no-files-found: ignore
+      - name:
