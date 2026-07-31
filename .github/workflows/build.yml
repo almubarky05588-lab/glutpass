@@ -66,6 +66,30 @@ jobs:
                 in_house: false
               )
 
+              # حذف شهادات التوزيع القديمة — الخادم جديد كل مرة ولا يملك مفاتيحها
+              begin
+                require 'spaceship'
+                Spaceship::ConnectAPI.token = Spaceship::ConnectAPI::Token.create(
+                  key_id: ENV["ASC_KEY_ID"],
+                  issuer_id: ENV["ASC_ISSUER_ID"],
+                  filepath: File.absolute_path("./keys/AuthKey.p8")
+                )
+                old = Spaceship::ConnectAPI::Certificate.all.select do |c|
+                  ["IOS_DISTRIBUTION", "DISTRIBUTION"].include?(c.certificate_type.to_s)
+                end
+                UI.message("شهادات توزيع قديمة: #{old.count}")
+                old.each do |c|
+                  begin
+                    c.delete!
+                    UI.message("حُذفت: #{c.id}")
+                  rescue => e
+                    UI.important("تعذّر حذف #{c.id}: #{e}")
+                  end
+                end
+              rescue => e
+                UI.important("تخطّي التنظيف: #{e}")
+              end
+
               create_keychain(
                 name: "build.keychain",
                 password: "temp1234",
