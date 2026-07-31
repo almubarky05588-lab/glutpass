@@ -132,6 +132,8 @@ class LegalScreen extends StatelessWidget {
                           size: 18, color: cDark))),
               Expanded(
                   child: Text(title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       textAlign: TextAlign.center,
                       style: const TextStyle(
                           fontSize: 18,
@@ -170,11 +172,11 @@ class LegalScreen extends StatelessWidget {
 class _About extends StatelessWidget {
   const _About();
 
-  void _open(BuildContext ctx, String titleKey, String bodyKey) =>
-      Navigator.push(
-          ctx,
-          MaterialPageRoute(
-              builder: (_) => LegalScreen(Content.t(titleKey), bodyKey)));
+  void _open(BuildContext ctx, String titleKey, String bodyKey) {
+    final t = Content.t(titleKey).split('\n').first.trim();
+    Navigator.push(
+        ctx, MaterialPageRoute(builder: (_) => LegalScreen(t, bodyKey)));
+  }
 
   @override
   Widget build(BuildContext ctx) => ListView(
@@ -205,23 +207,33 @@ class _About extends StatelessWidget {
           ),
           const SizedBox(height: 18),
           Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-            TextButton(
-              onPressed: () =>
-                  _open(ctx, 'legal.privacy', 'legal.privacy.body'),
-              child: Text(Content.t('legal.privacy'),
-                  style: const TextStyle(
-                      fontSize: 12.5,
-                      color: cGreen,
-                      fontWeight: FontWeight.w700)),
+            Flexible(
+              child: TextButton(
+                onPressed: () =>
+                    _open(ctx, 'legal.privacy', 'legal.privacy.body'),
+                child: Text(
+                    Content.t('legal.privacy').split('\n').first.trim(),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        fontSize: 12.5,
+                        color: cGreen,
+                        fontWeight: FontWeight.w700)),
+              ),
             ),
             const Text('·', style: TextStyle(color: cGrey)),
-            TextButton(
-              onPressed: () => _open(ctx, 'legal.terms', 'legal.terms.body'),
-              child: Text(Content.t('legal.terms'),
-                  style: const TextStyle(
-                      fontSize: 12.5,
-                      color: cGreen,
-                      fontWeight: FontWeight.w700)),
+            Flexible(
+              child: TextButton(
+                onPressed: () => _open(ctx, 'legal.terms', 'legal.terms.body'),
+                child: Text(
+                    Content.t('legal.terms').split('\n').first.trim(),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        fontSize: 12.5,
+                        color: cGreen,
+                        fontWeight: FontWeight.w700)),
+              ),
             ),
           ]),
           const SizedBox(height: 24),
