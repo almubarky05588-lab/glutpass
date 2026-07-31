@@ -21,6 +21,22 @@ dependencies:
 
 dev_dependencies:
   flutter_lints: ^4.0.0
+  flutter_launcher_icons: ^0.14.0
+  flutter_native_splash: ^2.4.0
 
 flutter:
   uses-material-design: true
+
+flutter_launcher_icons:
+  ios: true
+  android: false
+  image_path: "assets/brand/app_icon.png"
+  remove_alpha_ios: true
+
+flutter_native_splash:
+  color: "#146c43"
+  image: "assets/brand/splash.png"
+  ios_content_mode: center
+  ios: true
+  android: false
+  web: false
