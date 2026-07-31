@@ -11,7 +11,9 @@ import 'screens/submit.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Supabase.initialize(url: kUrl, anonKey: kKey);
-  await Content.load();   // النصوص من لوحة التحكم — تفشل بصمت وتبقى النسخة المدمجة
+  // كلاهما يفشل بصمت ويبقي النسخة المدمجة
+  await Content.load();
+  await Cities.load();
   runApp(const App());
 }
 
@@ -107,8 +109,73 @@ class _ShellState extends State<Shell> {
   }
 }
 
+/// شاشة نص قانوني — تقرأ من لوحة التحكم
+class LegalScreen extends StatelessWidget {
+  final String title, bodyKey;
+  const LegalScreen(this.title, this.bodyKey, {super.key});
+
+  @override
+  Widget build(BuildContext ctx) {
+    final body = Content.t(bodyKey);
+    return Scaffold(
+      backgroundColor: cBg,
+      body: SafeArea(
+        child: Column(children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
+            child: Row(children: [
+              SizedBox(
+                  width: 40,
+                  child: IconButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      icon: const Icon(Icons.arrow_back_ios,
+                          size: 18, color: cDark))),
+              Expanded(
+                  child: Text(title,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                          color: cDark))),
+              const SizedBox(width: 40),
+            ]),
+          ),
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 40),
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(18),
+                  decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(color: cBorder)),
+                  child: Text(
+                      body.trim().isEmpty
+                          ? 'لم يُنشر هذا النص بعد.'
+                          : body,
+                      textAlign: TextAlign.start,
+                      style: const TextStyle(
+                          fontSize: 14, color: cDark, height: 1.9)),
+                ),
+              ],
+            ),
+          ),
+        ]),
+      ),
+    );
+  }
+}
+
 class _About extends StatelessWidget {
   const _About();
+
+  void _open(BuildContext ctx, String titleKey, String bodyKey) =>
+      Navigator.push(
+          ctx,
+          MaterialPageRoute(
+              builder: (_) => LegalScreen(Content.t(titleKey), bodyKey)));
+
   @override
   Widget build(BuildContext ctx) => ListView(
         padding: const EdgeInsets.all(24),
@@ -138,11 +205,24 @@ class _About extends StatelessWidget {
           ),
           const SizedBox(height: 18),
           Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-            Text(Content.t('legal.privacy'),
-                style: const TextStyle(fontSize: 12.5, color: cGreen)),
-            const Text('  ·  ', style: TextStyle(color: cGrey)),
-            Text(Content.t('legal.terms'),
-                style: const TextStyle(fontSize: 12.5, color: cGreen)),
+            TextButton(
+              onPressed: () =>
+                  _open(ctx, 'legal.privacy', 'legal.privacy.body'),
+              child: Text(Content.t('legal.privacy'),
+                  style: const TextStyle(
+                      fontSize: 12.5,
+                      color: cGreen,
+                      fontWeight: FontWeight.w700)),
+            ),
+            const Text('·', style: TextStyle(color: cGrey)),
+            TextButton(
+              onPressed: () => _open(ctx, 'legal.terms', 'legal.terms.body'),
+              child: Text(Content.t('legal.terms'),
+                  style: const TextStyle(
+                      fontSize: 12.5,
+                      color: cGreen,
+                      fontWeight: FontWeight.w700)),
+            ),
           ]),
           const SizedBox(height: 24),
           const Text('صُنع بحب لمجتمع السيلياك في السعودية',
