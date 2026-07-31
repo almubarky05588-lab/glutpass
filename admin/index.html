@@ -202,8 +202,7 @@ async function vHome(){
           border-radius:5px;margin-right:auto"></div></div></div>`).join('')}</div>
   </div>`;
 }
-
-let curKey=null;
+  let curKey=null;
 async function vContent(){
   const { data:keys } = await sb.from('content_keys')
     .select('key,screen,description,tier,is_safety_critical').order('tier').order('key');
@@ -353,12 +352,11 @@ async function vSubs(){
   $('#view').onclick = async e => {
     const a=e.target.closest('.ap'), r=e.target.closest('.rj');
     if(!a && !r) return;
-    const me=(await sb.auth.getUser()).data.user.id;
-    if(a){ await sb.from('place_submissions').update({status:'published',
-      reviewed_by:me,reviewed_at:new Date().toISOString()}).eq('id',a.dataset.id); vSubs(); }
+    if(a){ const { error } = await sb.rpc('approve_submission',{ p_sub_id:a.dataset.id });
+      if(error) alert(error.message); vSubs(); }
     if(r){ const why=prompt('سبب الرفض؟'); if(!why) return;
-      await sb.from('place_submissions').update({status:'rejected',review_note:why,
-        reviewed_by:me,reviewed_at:new Date().toISOString()}).eq('id',r.dataset.id); vSubs(); }
+      const { error } = await sb.rpc('reject_submission',{ p_sub_id:r.dataset.id, p_note:why });
+      if(error) alert(error.message); vSubs(); }
   };
 }
 
@@ -404,12 +402,20 @@ async function vPlaces(){
     }
   };
 }
-
-async function vMod(){
-  const [rp,us] = await Promise.all([
+  async function vMod(){
+  const me = (await sb.auth.getUser()).data.user;
+  const { data:mp } = await sb.from('profiles').select('role').eq('id',me.id).maybeSingle();
+  const isAdmin = mp?.role === 'admin';
+  const [rp,st] = await Promise.all([
     sb.from('reports').select('*,places(name_ar)').eq('status','open').order('created_at',{ascending:false}),
-    sb.from('profiles').select('id,full_name,city,is_celiac,role,is_banned,trust_score').order('trust_score',{ascending:false})]);
-  const R=rp.data||[], U=us.data||[];
+    sb.rpc('admin_user_stats')]);
+  const R = rp.data||[], s = (st.data||[])[0]||{};
+  const K=[['إجمالي المستخدمين',s.total??0,'var(--green)'],
+    ['مرضى سيلياك',s.celiac??0,'var(--green)'],
+    ['محظورون',s.banned??0,'var(--red)'],
+    ['الطاقم',s.admins??0,'var(--blue)'],
+    ['جدد خلال ٧ أيام',s.new_7d??0,'var(--amber)']];
+
   $('#view').innerHTML=`
   <div class="card" style="margin-bottom:20px"><b>بلاغات تنتظر المراجعة (${R.length})</b>
     <p class="muted" style="margin:4px 0 14px">البلاغات الصحية لها أولوية</p>
@@ -422,36 +428,98 @@ async function vMod(){
         <button class="btn dgr rd" data-id="${r.id}">حذف المحتوى</button>
         <button class="btn sec ri" data-id="${r.id}">تجاهل البلاغ</button></div></div>`).join('')
       :'<p class="muted">لا توجد بلاغات مفتوحة ✓</p>'}</div>
-  <div class="card"><b>المستخدمون (${U.length})</b>
-    <p class="muted" style="margin:4px 0 14px">${U.filter(u=>u.is_celiac).length} منهم مرضى سيلياك — أصواتهم بوزن مضاعف</p>
-    <table><thead><tr><th>المستخدم</th><th>المدينة</th><th>سيلياك</th>
-    <th>الثقة</th><th>الدور</th><th>الحالة</th><th>إجراء</th></tr></thead><tbody>
-    ${U.map(u=>`<tr>
-      <td><b>${esc(u.full_name||'مستخدم')}</b></td>
-      <td>${esc(u.city||'—')}</td>
-      <td>${u.is_celiac?'<span class="pill" style="color:var(--green);background:var(--greenLt)">نعم</span>':'<span class="muted">—</span>'}</td>
-      <td><b>${u.trust_score}</b></td>
-      <td>${u.role==='admin'?'مدير':u.role==='moderator'?'مشرف':'مستخدم'}</td>
-      <td>${u.is_banned?'<span class="pill" style="color:var(--red);background:var(--redLt)">محظور</span>'
-        :'<span class="pill" style="color:var(--green);background:var(--greenLt)">نشط</span>'}</td>
-      <td>${u.role==='admin'?'<span class="muted">—</span>':
-        `<button class="btn ${u.is_banned?'sec':'dgr'} ub" data-id="${u.id}" data-b="${u.is_banned}">
-        ${u.is_banned?'رفع الحظر':'حظر'}</button>`}</td></tr>`).join('')}
-    </tbody></table></div>`;
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:18px">
+    ${K.map(k=>`<div class="card" style="padding:15px">
+      <b style="font-size:24px;display:block;color:${k[2]}">${k[1]}</b>
+      <span class="muted">${k[0]}</span></div>`).join('')}</div>
+
+  ${isAdmin?`<div class="card" style="margin-bottom:18px">
+    <b style="font-size:14px">ترقية مشرف جديد</b>
+    <p class="muted" style="margin:5px 0 12px">
+      لا يُنشأ الحساب من هنا — يسجّل الشخص من التطبيق أولاً ثم تُرقّيه ببريده.
+      <b>مدير</b> يملك كل شيء، و<b>مشرف</b> يراجع المحتوى دون إدارة الأدوار.</p>
+    <div class="row">
+      <input id="pe" placeholder="البريد الإلكتروني" style="flex:2;min-width:190px">
+      <select id="pr" style="flex:1;min-width:130px">
+        <option value="moderator">مشرف</option>
+        <option value="admin">مدير</option>
+        <option value="user">مستخدم عادي</option></select>
+      <button class="btn" id="pgo">تطبيق</button></div>
+    <p id="pmsg" style="font-size:12px;margin-top:10px"></p></div>`:''}
+
+  <div class="card">
+    <div class="row" style="margin-bottom:14px">
+      <b style="font-size:14px">المستخدمون</b><div class="sp"></div>
+      <input id="uq" placeholder="ابحث بالاسم أو البريد…" style="max-width:260px"></div>
+    <div id="utbl"><p class="muted">جارِ التحميل…</p></div></div>`;
+
+  const RN={admin:'مدير',moderator:'مشرف',user:'مستخدم'};
+  const fdate = d => d ? new Date(d).toLocaleDateString('ar-SA') : '—';
+
+  async function loadUsers(q){
+    const { data, error } = await sb.rpc('admin_list_users',{ p_search:q||null });
+    if(error){ $('#utbl').innerHTML=`<p style="color:var(--red);font-size:12px">${esc(error.message)}</p>`; return; }
+    const U=data||[];
+    if(!U.length){ $('#utbl').innerHTML='<p class="muted">لا نتائج</p>'; return; }
+    $('#utbl').innerHTML=`<table><thead><tr>
+      <th>المستخدم</th><th>البريد</th><th>المدينة</th><th>الجنس</th><th>سيلياك</th>
+      <th>أصوات</th><th>إضافات</th><th>الدور</th><th>التسجيل</th><th>آخر دخول</th>
+      <th>الحالة</th><th>إجراء</th></tr></thead><tbody>
+      ${U.map(u=>`<tr>
+        <td><b>${esc(u.full_name||'مستخدم')}</b></td>
+        <td class="muted" style="direction:ltr;text-align:right">${esc(u.email)}</td>
+        <td>${esc(u.city||'—')}</td>
+        <td>${u.gender==='male'?'ذكر':u.gender==='female'?'أنثى':'—'}</td>
+        <td>${u.is_celiac?'<span class="pill" style="color:var(--green);background:var(--greenLt)">نعم</span>':'<span class="muted">—</span>'}</td>
+        <td><b>${u.votes_count}</b></td><td><b>${u.subs_count}</b></td>
+        <td>${RN[u.role]||u.role}</td>
+        <td class="muted">${fdate(u.created_at)}</td>
+        <td class="muted">${fdate(u.last_sign_in_at)}</td>
+        <td>${u.is_banned
+          ?'<span class="pill" style="color:var(--red);background:var(--redLt)">محظور</span>'
+          :'<span class="pill" style="color:var(--green);background:var(--greenLt)">نشط</span>'}</td>
+        <td>${!isAdmin?'<span class="muted">—</span>':`
+          <button class="btn sec urn" data-id="${u.id}" data-n="${esc(u.full_name||'')}">اسم</button>
+          ${u.id===me.id?'':`<button class="btn ${u.is_banned?'sec':'dgr'} ubn"
+            data-id="${u.id}" data-b="${u.is_banned}">${u.is_banned?'رفع':'حظر'}</button>`}`}
+        </td></tr>`).join('')}</tbody></table>`;
+  }
+  loadUsers('');
+
+  let ut=null;
+  $('#uq').oninput = e => { clearTimeout(ut); const v=e.target.value;
+    ut=setTimeout(()=>loadUsers(v),350); };
+
+  if(isAdmin) $('#pgo').onclick = async () => {
+    const m=$('#pmsg'), em=$('#pe').value.trim();
+    if(!em){ m.style.color='var(--red)'; m.textContent='اكتب البريد'; return; }
+    m.style.color='var(--grey)'; m.textContent='جارِ التنفيذ…';
+    const { error } = await sb.rpc('admin_set_role',{ p_email:em, p_role:$('#pr').value });
+    if(error){ m.style.color='var(--red)'; m.textContent=error.message; return; }
+    m.style.color='var(--green)'; m.textContent='✓ تم تحديث الدور';
+    $('#pe').value=''; vMod();
+  };
+
   $('#view').onclick = async e => {
-    const d=e.target.closest('.rd'), i=e.target.closest('.ri'), b=e.target.closest('.ub');
-    if(!d && !i && !b) return;
-    const me=(await sb.auth.getUser()).data.user.id;
+    const d=e.target.closest('.rd'), i=e.target.closest('.ri'),
+          b=e.target.closest('.ubn'), r=e.target.closest('.urn');
+    if(!d && !i && !b && !r) return;
     if(d && confirm('حذف المحتوى المبلَّغ عنه وإغلاق البلاغ؟')){
       await sb.from('reports').update({status:'resolved',resolution:'حُذف المحتوى',
-        resolved_by:me,resolved_at:new Date().toISOString()}).eq('id',d.dataset.id); vMod(); }
+        resolved_by:me.id,resolved_at:new Date().toISOString()}).eq('id',d.dataset.id); vMod(); }
     if(i){ await sb.from('reports').update({status:'ignored',resolution:'بلاغ غير صحيح',
-      resolved_by:me,resolved_at:new Date().toISOString()}).eq('id',i.dataset.id); vMod(); }
+      resolved_by:me.id,resolved_at:new Date().toISOString()}).eq('id',i.dataset.id); vMod(); }
     if(b){ const ban=b.dataset.b!=='true';
-      if(!confirm(ban?'حظر هذا المستخدم؟':'رفع الحظر؟')) return;
-      const { error } = await sb.from('profiles').update({is_banned:ban}).eq('id',b.dataset.id);
-      if(error) alert(error.message);
+      if(!confirm(ban?'حظر هذا المستخدم؟ لن يستطيع التصويت أو الإضافة.':'رفع الحظر؟')) return;
+      const { error } = await sb.rpc('admin_set_ban',{ p_user:b.dataset.id, p_banned:ban });
+      if(error) return alert(error.message);
       vMod(); }
+    if(r){ const nm=prompt('الاسم الجديد:', r.dataset.n);
+      if(nm===null || !nm.trim()) return;
+      const { error } = await sb.rpc('admin_set_name',{ p_user:r.dataset.id, p_name:nm.trim() });
+      if(error) return alert(error.message);
+      loadUsers($('#uq').value); }
   };
 }
 
@@ -539,5 +607,3 @@ sb.auth.getSession().then(({data})=>{ if(data.session) boot(); });
 </script>
 </body>
 </html>
-
-
