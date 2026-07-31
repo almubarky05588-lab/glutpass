@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'core.dart';
 import 'content.dart';
+import 'push.dart';
 import 'screens/home.dart';
 import 'screens/account.dart';
 import 'screens/submit.dart';
@@ -12,9 +13,10 @@ import 'screens/map.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Supabase.initialize(url: kUrl, anonKey: kKey);
-  // كلاهما يفشل بصمت ويبقي النسخة المدمجة
+  // الثلاثة تفشل بصمت ولا توقف الإقلاع
   await Content.load();
   await Cities.load();
+  await Push.init();
   runApp(const App());
 }
 
