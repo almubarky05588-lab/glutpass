@@ -704,8 +704,128 @@ async function vRules(){
       const { error } = await sb.from('cities').delete().eq('id',cd.dataset.id);
       if(error) alert(error.message);
       vRules(); }
+  
   };
 }
+// ــــ تفعيل الإرسال: يستبدل vNotif القديمة بنسخة تنادي دالة الإرسال ــــ
+vNotif = async function(){
+  const [cp,pl,dt] = await Promise.all([
+    sb.from('notification_campaigns').select('*').order('created_at',{ascending:false}),
+    sb.from('places').select('id,name_ar').order('name_ar'),
+    sb.from('device_tokens').select('id,platform').eq('is_active',true)]);
+  const C=cp.data||[], P=pl.data||[], D=dt.data||[];
+  const ios=D.filter(d=>d.platform==='ios').length;
+  const and=D.filter(d=>d.platform==='android').length;
+  const ST={draft:['مسودة','var(--grey)','var(--bg)'],
+    scheduled:['مجدولة','var(--amber)','var(--amberLt)'],
+    sending:['جارِ الإرسال','var(--amber)','var(--amberLt)'],
+    sent:['مُرسلة','var(--green)','var(--greenLt)'],
+    failed:['فشلت','var(--red)','var(--redLt)'],
+    cancelled:['ملغاة','var(--red)','var(--redLt)']};
+
+  $('#view').innerHTML=`
+  <div class="${D.length?'ok':'warn'}">
+    ${D.length
+      ? `✓ خدمة الإشعارات تعمل — <b>${D.length}</b> جهاز مسجّل (${ios} آيفون، ${and} أندرويد)`
+      : '⚠ لا توجد أجهزة مسجّلة بعد — لن يصل الإشعار لأحد. افتح التطبيق وفعّل الإشعارات من «حسابي».'}
+  </div>
+  <div class="grid"><div>
+    <div class="card" style="margin-bottom:20px"><b>حملة إشعار جديدة</b>
+      <p class="muted" style="margin:4px 0 14px">تصل أجهزة المستخدمين المطابقين خلال ثوانٍ</p>
+      <label class="muted">عنوان الإشعار</label>
+      <input id="nt" placeholder="جرّب قائمة لوسين الجديدة">
+      <label class="muted" style="display:block;margin-top:12px">نص الإشعار</label>
+      <textarea id="nb" placeholder="مطعم لوسين أضاف ٦ أطباق آمنة معتمدة..."></textarea>
+      <label class="muted" style="display:block;margin-top:12px">الجمهور المستهدف</label>
+      <select id="na">
+        <option value="all">الجميع</option>
+        <option value="celiac_only">مرضى السيلياك فقط</option>
+      </select>
+      <label class="muted" style="display:block;margin-top:12px">الوجهة عند الضغط</label>
+      <select id="nd"><option value="none">لا شيء</option>
+        ${P.map(p=>`<option value="${p.id}">صفحة — ${esc(p.name_ar)}</option>`).join('')}</select>
+      <div class="row" style="margin-top:16px;flex-wrap:wrap">
+        <button class="btn" id="nsave">حفظ كمسودة</button>
+        <button class="btn sec" id="nnow">حفظ وإرسال الآن</button></div>
+      <p id="nmsg" style="font-size:12px;margin-top:10px"></p></div>
+    <div class="card"><b>الحملات (${C.length})</b>
+      <table style="margin-top:12px"><thead><tr><th>العنوان</th><th>الجمهور</th>
+      <th>وصلت</th><th>الحالة</th><th>الإجراء</th></tr></thead><tbody>
+      ${C.map(x=>{const s=ST[x.status]||ST.draft;return `<tr>
+        <td><b>${esc(x.title_ar)}</b><div class="muted">${esc((x.body_ar||'').slice(0,45))}…</div></td>
+        <td class="muted">${x.audience_type==='celiac_only'?'سيلياك':x.audience_type==='all'?'الجميع':esc(x.audience_type)}</td>
+        <td><b>${x.sent_count||0}</b></td>
+        <td><span class="pill" style="color:${s[1]};background:${s[2]}">${s[0]}</span></td>
+        <td>${x.status==='sent'
+          ? '<span class="muted">—</span>'
+          : `<button class="btn csend" data-id="${x.id}">إرسال</button>`}
+          <button class="btn dgr cdel" data-id="${x.id}">حذف</button></td></tr>`;}).join('')
+        ||'<tr><td colspan="5" class="muted">لا توجد حملات بعد</td></tr>'}
+      </tbody></table></div></div>
+  <div class="card"><b>اختبار سريع</b>
+    <p class="muted" style="margin:4px 0 12px">يرسل إشعاراً تجريبياً لكل الأجهزة المسجّلة</p>
+    <button class="btn sec" id="ntest" style="width:100%">إرسال إشعار تجريبي</button>
+    <p id="tmsg" style="font-size:12px;margin-top:10px"></p>
+    <div style="border-top:1px solid var(--border);margin-top:16px;padding-top:14px">
+      <b style="font-size:13px">الإشعارات التلقائية</b>
+      <p class="muted" style="margin:4px 0 10px">يرسلها النظام بلا تدخل</p>
+      ${[['تغيّر تصنيف مكان محفوظ','تنبيه صحي — لا يمكن إيقافه',true],
+         ['نشر مكان أضافه المستخدم','',false],
+         ['رفض مكان مع بيان السبب','',false]]
+        .map((a,i)=>`<div style="padding:10px 0;border-top:${i?'1px solid var(--border)':'none'}">
+        <b style="font-size:12.5px">${a[0]}</b>
+        ${a[1]?`<div style="font-size:11px;color:${a[2]?'var(--red)':'var(--grey)'};margin-top:3px">${a[1]}</div>`:''}
+        </div>`).join('')}
+      <p class="muted" style="margin-top:8px">هذه لم تُبرمج بعد — تُضاف لاحقاً</p>
+    </div></div></div>`;
+
+  const nm=(t,c)=>{const x=$('#nmsg');x.textContent=t;x.style.color=c;};
+  const tm=(t,c)=>{const x=$('#tmsg');x.textContent=t;x.style.color=c;};
+
+  async function fire(id, msgFn){
+    msgFn('جارِ الإرسال…','var(--grey)');
+    const { data, error } = await sb.functions.invoke('send-push',{ body:{ campaign_id:id } });
+    if(error){ msgFn('تعذّر الإرسال: '+error.message,'var(--red)'); return; }
+    if(data?.error){ msgFn('خطأ: '+data.error,'var(--red)'); return; }
+    msgFn(`✓ وصل ${data?.sent??0} جهاز`+
+      ((data?.failed) ? ` · فشل ${data.failed}` : '')+
+      ((data?.note) ? ` · ${data.note}` : ''),'var(--green)');
+    setTimeout(vNotif,1400);
+  }
+
+  async function save(send){
+    const t=$('#nt').value.trim(), b=$('#nb').value.trim();
+    if(!t||!b) return nm('اكتب العنوان والنص','var(--red)');
+    const { data, error } = await sb.from('notification_campaigns').insert({
+      title_ar:t, body_ar:b, audience_type:$('#na').value,
+      deeplink_type:$('#nd').value==='none'?'none':'place',
+      deeplink_value:$('#nd').value==='none'?null:$('#nd').value,
+      status:'draft', estimated_reach:D.length,
+      created_by:(await sb.auth.getUser()).data.user.id }).select('id').single();
+    if(error) return nm(error.message,'var(--red)');
+    if(send){ await fire(data.id, nm); }
+    else { nm('✓ حُفظت كمسودة','var(--green)'); setTimeout(vNotif,900); }
+  }
+
+  $('#nsave').onclick=()=>save(false);
+  $('#nnow').onclick=()=>save(true);
+
+  $('#ntest').onclick = async () => {
+    tm('جارِ الإرسال…','var(--grey)');
+    const { data, error } = await sb.functions.invoke('send-push',{
+      body:{ title:'تجربة GlutPass 🌿', body:'وصلك الإشعار — كل شيء يعمل.' } });
+    if(error) return tm('تعذّر: '+error.message,'var(--red)');
+    if(data?.error) return tm('خطأ: '+data.error,'var(--red)');
+    tm(`✓ وصل ${data?.sent??0} جهاز`+((data?.failed)?` · فشل ${data.failed}`:''),'var(--green)');
+  };
+
+  $('#view').onclick = async e => {
+    const s=e.target.closest('.csend'), d=e.target.closest('.cdel');
+    if(s){ if(!confirm('إرسال هذه الحملة الآن؟')) return; await fire(s.dataset.id, nm); }
+    if(d && confirm('حذف هذه الحملة؟')){
+      await sb.from('notification_campaigns').delete().eq('id',d.dataset.id); vNotif(); }
+  };
+};
 
 sb.auth.getSession().then(({data})=>{ if(data.session) boot(); });
 </script>
