@@ -94,11 +94,14 @@ class _HomeScreenState extends State<HomeScreen> {
           ])),
           const SizedBox(height: 10),
           if (ps.isEmpty)
-            const Padding(
-                padding: EdgeInsets.all(32),
-                child: Text('لا توجد أماكن في هذه المدينة بعد',
+            Padding(
+                padding: const EdgeInsets.all(32),
+                child: Text(
+                    _city == 'الكل'
+                        ? 'لا توجد أماكن بعد'
+                        : 'لا توجد أماكن في $_city بعد',
                     textAlign: TextAlign.center,
-                    style: TextStyle(color: cGrey))),
+                    style: const TextStyle(color: cGrey))),
           ...ps.map(_card),
           const SizedBox(height: 100),
         ]);
@@ -109,7 +112,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _pad(Widget w) =>
       Padding(padding: const EdgeInsets.symmetric(horizontal: 20), child: w);
 
-Widget _header() => Container(
+  Widget _header() => Container(
         height: 96,
         color: cGreen,
         padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -198,35 +201,38 @@ Widget _header() => Container(
         ]),
       );
 
-  Widget _chips() => SizedBox(
-        height: 36,
-        child: ListView.separated(
-          scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          itemCount: 4,
-          separatorBuilder: (_, __) => const SizedBox(width: 8),
-          itemBuilder: (_, i) {
-            final c = ['الكل', 'الرياض', 'جدة', 'الدمام'][i];
-            final on = c == _city;
-            return GestureDetector(
-              onTap: () => _pick(c),
-              child: Container(
-                alignment: Alignment.center,
-                padding: const EdgeInsets.symmetric(horizontal: 18),
-                decoration: BoxDecoration(
-                    color: on ? cGreen : Colors.white,
-                    borderRadius: BorderRadius.circular(18),
-                    border: Border.all(color: on ? cGreen : cBorder)),
-                child: Text(c,
-                    style: TextStyle(
-                        color: on ? Colors.white : cDark,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600)),
-              ),
-            );
-          },
-        ),
-      );
+  Widget _chips() {
+    final list = ['الكل', ...Cities.all];
+    return SizedBox(
+      height: 36,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        itemCount: list.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        itemBuilder: (_, i) {
+          final c = list[i];
+          final on = c == _city;
+          return GestureDetector(
+            onTap: () => _pick(c),
+            child: Container(
+              alignment: Alignment.center,
+              padding: const EdgeInsets.symmetric(horizontal: 18),
+              decoration: BoxDecoration(
+                  color: on ? cGreen : Colors.white,
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: on ? cGreen : cBorder)),
+              child: Text(c,
+                  style: TextStyle(
+                      color: on ? Colors.white : cDark,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600)),
+            ),
+          );
+        },
+      ),
+    );
+  }
 
   Widget _card(Place p) => GestureDetector(
         onTap: () => _open(p),

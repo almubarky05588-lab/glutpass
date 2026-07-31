@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../core.dart';
 import 'details.dart';
@@ -24,6 +25,7 @@ class _AccountScreenState extends State<AccountScreen> {
   @override
   void initState() {
     super.initState();
+    _city = Cities.all.isNotEmpty ? Cities.all.first : 'الرياض';
     _load();
     Supabase.instance.client.auth.onAuthStateChange.listen((_) {
       if (mounted) _load();
@@ -45,7 +47,7 @@ class _AccountScreenState extends State<AccountScreen> {
     try {
       final p = await c
           .from('profiles')
-          .select('full_name,city,is_celiac')
+          .select('full_name,city,is_celiac,gender,avatar_url')
           .eq('id', u.id)
           .maybeSingle();
       final v = await c.from('votes').select('id').eq('user_id', u.id);
@@ -70,6 +72,8 @@ class _AccountScreenState extends State<AccountScreen> {
             'name': p?['full_name'] ?? 'مستخدم',
             'city': p?['city'] ?? '',
             'celiac': p?['is_celiac'] ?? false,
+            'gender': p?['gender'],
+            'avatar': p?['avatar_url'],
             'votes': (v as List).length,
             'subs': (subs as List).length,
             'email': u.email ?? '',
@@ -123,21 +127,238 @@ class _AccountScreenState extends State<AccountScreen> {
     await _load();
   }
 
+  void _toast(String t, {bool ok = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(t, style: const TextStyle(fontSize: 13)),
+      backgroundColor: ok ? cGreen : cAmber,
+      behavior: SnackBarBehavior.floating,
+    ));
+  }
+
+  // ــــــــ إعدادات الحساب ــــــــ
+
+  Future<void> _pickAvatar(ImageSource src) async {
+    final c = Supabase.instance.client;
+    final u = c.auth.currentUser;
+    if (u == null) return;
+    try {
+      final x = await ImagePicker()
+          .pickImage(source: src, maxWidth: 720, imageQuality: 82);
+      if (x == null) return;
+      final bytes = await x.readAsBytes();
+      if (bytes.lengthInBytes > 2 * 1024 * 1024) {
+        _toast('الصورة أكبر من ٢ ميجابايت');
+        return;
+      }
+      final path = '${u.id}/avatar.jpg';
+      await c.storage.from('avatars').uploadBinary(path, bytes,
+          fileOptions: const FileOptions(
+              upsert: true, contentType: 'image/jpeg'));
+      final base = c.storage.from('avatars').getPublicUrl(path);
+      final url = '$base?v=${DateTime.now().millisecondsSinceEpoch}';
+      await c.from('profiles').update({'avatar_url': url}).eq('id', u.id);
+      await _load();
+      _toast('تم تحديث الصورة', ok: true);
+    } catch (e) {
+      _toast('$e');
+    }
+  }
+
+  Future<void> _removeAvatar() async {
+    final c = Supabase.instance.client;
+    final u = c.auth.currentUser;
+    if (u == null) return;
+    try {
+      await c.storage.from('avatars').remove(['${u.id}/avatar.jpg']);
+    } catch (_) {}
+    try {
+      await c.from('profiles').update({'avatar_url': null}).eq('id', u.id);
+      await _load();
+      _toast('حُذفت الصورة', ok: true);
+    } catch (e) {
+      _toast('$e');
+    }
+  }
+
+  void _avatarSheet() {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
+      builder: (sctx) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const SizedBox(height: 10),
+          Container(
+              width: 42,
+              height: 4,
+              decoration: BoxDecoration(
+                  color: cBorder, borderRadius: BorderRadius.circular(2))),
+          const SizedBox(height: 14),
+          ListTile(
+            leading: const Icon(Icons.photo_library_outlined, color: cGreen),
+            title: const Text('اختيار من الصور',
+                style: TextStyle(fontSize: 14, color: cDark)),
+            onTap: () {
+              Navigator.pop(sctx);
+              _pickAvatar(ImageSource.gallery);
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.photo_camera_outlined, color: cGreen),
+            title: const Text('التقاط صورة',
+                style: TextStyle(fontSize: 14, color: cDark)),
+            onTap: () {
+              Navigator.pop(sctx);
+              _pickAvatar(ImageSource.camera);
+            },
+          ),
+          if (_me?['avatar'] != null)
+            ListTile(
+              leading: const Icon(Icons.delete_outline, color: cAmber),
+              title: const Text('حذف الصورة',
+                  style: TextStyle(fontSize: 14, color: cAmber)),
+              onTap: () {
+                Navigator.pop(sctx);
+                _removeAvatar();
+              },
+            ),
+          const SizedBox(height: 8),
+        ]),
+      ),
+    );
+  }
+
+  Future<void> _setField(String key, dynamic val) async {
+    final c = Supabase.instance.client;
+    final u = c.auth.currentUser;
+    if (u == null) return;
+    try {
+      await c.from('profiles').update({key: val}).eq('id', u.id);
+      await _load();
+      _toast('تم الحفظ', ok: true);
+    } catch (e) {
+      _toast('$e');
+    }
+  }
+
+  Future<void> _editName() async {
+    final ctl = TextEditingController(text: _me?['name'] as String? ?? '');
+    final v = await _prompt('الاسم الكامل', ctl, 'اكتب اسمك');
+    if (v == null || v.trim().isEmpty) return;
+    await _setField('full_name', v.trim());
+  }
+
+  Future<void> _changeEmail() async {
+    final ctl = TextEditingController();
+    final v = await _prompt('البريد الجديد', ctl, 'example@email.com',
+        note: 'سيصلك رابط تأكيد على البريدين القديم والجديد. '
+            'لا يتغيّر البريد حتى تضغط الرابط.');
+    if (v == null || v.trim().isEmpty) return;
+    try {
+      await Supabase.instance.client.auth
+          .updateUser(UserAttributes(email: v.trim()));
+      _toast('أُرسل رابط التأكيد — راجع بريدك', ok: true);
+    } on AuthException catch (e) {
+      _toast(e.message);
+    } catch (e) {
+      _toast('$e');
+    }
+  }
+
+  Future<String?> _prompt(String title, TextEditingController ctl, String hint,
+      {String? note}) {
+    return showDialog<String>(
+      context: context,
+      builder: (dctx) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        title: Text(title,
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          TextField(
+            controller: ctl,
+            autofocus: true,
+            textAlign: TextAlign.start,
+            decoration: InputDecoration(
+              hintText: hint,
+              hintStyle: const TextStyle(color: cGrey, fontSize: 13),
+              enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: cBorder)),
+              focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: cGreen)),
+            ),
+          ),
+          if (note != null) ...[
+            const SizedBox(height: 12),
+            Text(note,
+                style: const TextStyle(
+                    color: cGrey, fontSize: 11.5, height: 1.6)),
+          ],
+        ]),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(dctx),
+              child: const Text('إلغاء', style: TextStyle(color: cGrey))),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: cGreen),
+            onPressed: () => Navigator.pop(dctx, ctl.text),
+            child: const Text('حفظ'),
+          ),
+        ],
+      ),
+    );
+  }
   @override
   Widget build(BuildContext ctx) => _me == null ? _form() : _profile(ctx);
+
+  Widget _avatar() {
+    final url = _me?['avatar'] as String?;
+    return GestureDetector(
+      onTap: _avatarSheet,
+      child: Stack(alignment: Alignment.center, children: [
+        Container(
+          width: 92,
+          height: 92,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+              color: cGreen,
+              shape: BoxShape.circle,
+              image: url == null
+                  ? null
+                  : DecorationImage(
+                      image: NetworkImage(url), fit: BoxFit.cover)),
+          child: url == null
+              ? const Icon(Icons.person, color: Colors.white, size: 42)
+              : null,
+        ),
+        Positioned(
+          bottom: 0,
+          left: 0,
+          child: Container(
+            width: 30,
+            height: 30,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+                color: Colors.white,
+                shape: BoxShape.circle,
+                border: Border.all(color: cBorder)),
+            child: const Icon(Icons.photo_camera_outlined,
+                size: 16, color: cGreen),
+          ),
+        ),
+      ]),
+    );
+  }
 
   Widget _profile(BuildContext ctx) => ListView(
         padding: const EdgeInsets.all(20),
         children: [
           const SizedBox(height: 16),
-          Container(
-            width: 84,
-            height: 84,
-            alignment: Alignment.center,
-            decoration:
-                const BoxDecoration(color: cGreen, shape: BoxShape.circle),
-            child: const Icon(Icons.person, color: Colors.white, size: 40),
-          ),
+          Center(child: _avatar()),
           const SizedBox(height: 14),
           Text(_me!['name'] as String,
               textAlign: TextAlign.center,
@@ -172,6 +393,30 @@ class _AccountScreenState extends State<AccountScreen> {
                     ),
                   ]),
             ),
+          const SizedBox(height: 24),
+          const Row(children: [
+            Text('إعدادات الحساب',
+                style: TextStyle(
+                    fontSize: 16, fontWeight: FontWeight.w700, color: cDark)),
+          ]),
+          const SizedBox(height: 10),
+          Container(
+            decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: cBorder)),
+            child: Column(children: [
+              _tile(Icons.person_outline, 'الاسم',
+                  _me!['name'] as String, _editName),
+              _sep(),
+              _tile(Icons.mail_outline, 'البريد الإلكتروني',
+                  _me!['email'] as String, _changeEmail),
+              _sep(),
+              _genderRow(),
+              _sep(),
+              _cityRow(),
+            ]),
+          ),
           const SizedBox(height: 24),
           const Row(children: [
             Text('أماكني المحفوظة',
@@ -240,6 +485,123 @@ class _AccountScreenState extends State<AccountScreen> {
         ],
       );
 
+  Widget _sep() => const Divider(height: 1, color: cBorder, indent: 14, endIndent: 14);
+
+  Widget _tile(IconData ic, String label, String val, VoidCallback onTap) =>
+      InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+          child: Row(children: [
+            Icon(ic, size: 19, color: cGrey),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(label,
+                        style: const TextStyle(fontSize: 11, color: cGrey)),
+                    const SizedBox(height: 2),
+                    Text(val,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                            fontSize: 13.5,
+                            color: cDark,
+                            fontWeight: FontWeight.w600)),
+                  ]),
+            ),
+            const Icon(Icons.edit_outlined, size: 16, color: cGreen),
+          ]),
+        ),
+      );
+
+  Widget _genderRow() {
+    final g = _me?['gender'] as String?;
+    Widget opt(String key, String label, IconData ic) {
+      final on = g == key;
+      return Expanded(
+        child: GestureDetector(
+          onTap: () => _setField('gender', key),
+          child: Container(
+            margin: const EdgeInsetsDirectional.only(end: 8),
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+                color: on ? cSafeBg : Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: on ? cGreen : cBorder)),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              Icon(ic, size: 16, color: on ? cGreen : cGrey),
+              const SizedBox(width: 6),
+              Text(label,
+                  style: TextStyle(
+                      fontSize: 13,
+                      color: on ? cGreen : cDark,
+                      fontWeight: on ? FontWeight.w700 : FontWeight.w500)),
+            ]),
+          ),
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 12, 6, 12),
+      child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Row(children: [
+              Icon(Icons.wc_outlined, size: 19, color: cGrey),
+              SizedBox(width: 10),
+              Text('الجنس', style: TextStyle(fontSize: 11, color: cGrey)),
+            ]),
+            const SizedBox(height: 8),
+            Row(children: [
+              opt('male', 'ذكر', Icons.male),
+              opt('female', 'أنثى', Icons.female),
+            ]),
+          ]),
+    );
+  }
+
+  Widget _cityRow() {
+    final city = (_me?['city'] as String?) ?? '';
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+      child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Row(children: [
+              Icon(Icons.location_city_outlined, size: 19, color: cGrey),
+              SizedBox(width: 10),
+              Text('مدينتي', style: TextStyle(fontSize: 11, color: cGrey)),
+            ]),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: Cities.all.map((c) {
+                final on = c == city;
+                return GestureDetector(
+                  onTap: () => _setField('city', c),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 7),
+                    decoration: BoxDecoration(
+                        color: on ? cGreen : Colors.white,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: on ? cGreen : cBorder)),
+                    child: Text(c,
+                        style: TextStyle(
+                            color: on ? Colors.white : cDark, fontSize: 12.5)),
+                  ),
+                );
+              }).toList(),
+            ),
+          ]),
+    );
+  }
+
   Widget _stat(String a, String b) => Expanded(
         child: Container(
           height: 62,
@@ -289,12 +651,12 @@ class _AccountScreenState extends State<AccountScreen> {
                       color: cDark)),
             ]),
             const SizedBox(height: 6),
-            Row(
-                children: ['الرياض', 'جدة', 'الدمام'].map((c) {
-              final on = c == _city;
-              return Padding(
-                padding: const EdgeInsetsDirectional.only(end: 8),
-                child: GestureDetector(
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: Cities.all.map((c) {
+                final on = c == _city;
+                return GestureDetector(
                   onTap: () => setState(() => _city = c),
                   child: Container(
                     padding: const EdgeInsets.symmetric(
@@ -307,9 +669,9 @@ class _AccountScreenState extends State<AccountScreen> {
                         style: TextStyle(
                             color: on ? Colors.white : cDark, fontSize: 13)),
                   ),
-                ),
-              );
-            }).toList()),
+                );
+              }).toList(),
+            ),
             const SizedBox(height: 14),
             GestureDetector(
               onTap: () => setState(() => _celiac = !_celiac),

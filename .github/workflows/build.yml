@@ -47,6 +47,10 @@ jobs:
           /usr/libexec/PlistBuddy -c "Add :CFBundleLocalizations:0 string ar" "$PL" || true
           /usr/libexec/PlistBuddy -c "Add :CFBundleDevelopmentRegion string ar" "$PL" \
             || /usr/libexec/PlistBuddy -c "Set :CFBundleDevelopmentRegion ar" "$PL"
+          /usr/libexec/PlistBuddy -c "Add :NSPhotoLibraryUsageDescription string 'يحتاج GlutPass الوصول لصورك لاختيار صورة حسابك.'" "$PL" \
+            || /usr/libexec/PlistBuddy -c "Set :NSPhotoLibraryUsageDescription 'يحتاج GlutPass الوصول لصورك لاختيار صورة حسابك.'" "$PL"
+          /usr/libexec/PlistBuddy -c "Add :NSCameraUsageDescription string 'يحتاج GlutPass الكاميرا لالتقاط صورة حسابك.'" "$PL" \
+            || /usr/libexec/PlistBuddy -c "Set :NSCameraUsageDescription 'يحتاج GlutPass الكاميرا لالتقاط صورة حسابك.'" "$PL"
           /usr/libexec/PlistBuddy -c "Print" "$PL"
 
       - run: flutter pub get
