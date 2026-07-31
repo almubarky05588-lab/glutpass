@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../core.dart';
+import '../push.dart';
 import 'details.dart';
 
 class AccountScreen extends StatefulWidget {
@@ -18,6 +19,7 @@ class _AccountScreenState extends State<AccountScreen> {
   bool _celiac = false;
   bool _signup = false;
   bool _busy = false;
+  bool _push = false;
   String? _msg;
   Map<String, dynamic>? _me;
   List<Place> _saved = [];
@@ -27,9 +29,18 @@ class _AccountScreenState extends State<AccountScreen> {
     super.initState();
     _city = Cities.all.isNotEmpty ? Cities.all.first : 'الرياض';
     _load();
+    _checkPush();
     Supabase.instance.client.auth.onAuthStateChange.listen((_) {
-      if (mounted) _load();
+      if (mounted) {
+        _load();
+        _checkPush();
+      }
     });
+  }
+
+  Future<void> _checkPush() async {
+    final v = await Push.isEnabled();
+    if (mounted) setState(() => _push = v);
   }
 
   Future<void> _load() async {
@@ -137,6 +148,20 @@ class _AccountScreenState extends State<AccountScreen> {
   }
 
   // ــــــــ إعدادات الحساب ــــــــ
+
+  Future<void> _togglePush() async {
+    if (_push) {
+      _toast('لإيقاف الإشعارات: إعدادات الجهاز ← GlutPass ← الإشعارات');
+      return;
+    }
+    final ok = await Push.register();
+    await _checkPush();
+    if (ok) {
+      _toast('فُعّلت الإشعارات', ok: true);
+    } else {
+      _toast('لم يُمنح الإذن — فعّله من إعدادات الجهاز');
+    }
+  }
 
   Future<void> _pickAvatar(ImageSource src) async {
     final c = Supabase.instance.client;
@@ -412,6 +437,8 @@ class _AccountScreenState extends State<AccountScreen> {
               _tile(Icons.mail_outline, 'البريد الإلكتروني',
                   _me!['email'] as String, _changeEmail),
               _sep(),
+              _pushRow(),
+              _sep(),
               _genderRow(),
               _sep(),
               _cityRow(),
@@ -485,7 +512,8 @@ class _AccountScreenState extends State<AccountScreen> {
         ],
       );
 
-  Widget _sep() => const Divider(height: 1, color: cBorder, indent: 14, endIndent: 14);
+  Widget _sep() =>
+      const Divider(height: 1, color: cBorder, indent: 14, endIndent: 14);
 
   Widget _tile(IconData ic, String label, String val, VoidCallback onTap) =>
       InkWell(
@@ -512,6 +540,36 @@ class _AccountScreenState extends State<AccountScreen> {
                   ]),
             ),
             const Icon(Icons.edit_outlined, size: 16, color: cGreen),
+          ]),
+        ),
+      );
+
+  Widget _pushRow() => InkWell(
+        onTap: _togglePush,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+          child: Row(children: [
+            Icon(_push ? Icons.notifications_active : Icons.notifications_off,
+                size: 19, color: _push ? cGreen : cGrey),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('الإشعارات',
+                        style: TextStyle(fontSize: 11, color: cGrey)),
+                    const SizedBox(height: 2),
+                    Text(_push ? 'مفعّلة' : 'موقوفة — اضغط للتفعيل',
+                        style: TextStyle(
+                            fontSize: 13.5,
+                            color: _push ? cGreen : cDark,
+                            fontWeight: FontWeight.w600)),
+                  ]),
+            ),
+            if (_push)
+              const Icon(Icons.check_circle, size: 18, color: cGreen)
+            else
+              const Icon(Icons.arrow_back_ios, size: 14, color: cGrey),
           ]),
         ),
       );
