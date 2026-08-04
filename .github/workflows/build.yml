@@ -51,6 +51,8 @@ jobs:
             || /usr/libexec/PlistBuddy -c "Set :NSPhotoLibraryUsageDescription 'يحتاج GlutPass الوصول لصورك لاختيار صورة حسابك أو شعار المكان.'" "$PL"
           /usr/libexec/PlistBuddy -c "Add :NSCameraUsageDescription string 'يحتاج GlutPass الكاميرا لالتقاط صورة حسابك أو شعار المكان.'" "$PL" \
             || /usr/libexec/PlistBuddy -c "Set :NSCameraUsageDescription 'يحتاج GlutPass الكاميرا لالتقاط صورة حسابك أو شعار المكان.'" "$PL"
+          /usr/libexec/PlistBuddy -c "Add :NSLocationWhenInUseUsageDescription string 'يستخدم GlutPass موقعك لعرض المطاعم القريبة منك على الخريطة وحساب المسافة إليها.'" "$PL" \
+            || /usr/libexec/PlistBuddy -c "Set :NSLocationWhenInUseUsageDescription 'يستخدم GlutPass موقعك لعرض المطاعم القريبة منك على الخريطة وحساب المسافة إليها.'" "$PL"
           /usr/libexec/PlistBuddy -c "Add :UIBackgroundModes array" "$PL" || true
           /usr/libexec/PlistBuddy -c "Add :UIBackgroundModes:0 string remote-notification" "$PL" || true
           /usr/libexec/PlistBuddy -c "Print" "$PL"
