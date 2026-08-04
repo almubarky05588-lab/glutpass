@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'core.dart';
 import 'content.dart';
 import 'push.dart';
+import 'splash.dart';
 import 'screens/home.dart';
 import 'screens/account.dart';
 import 'screens/submit.dart';
@@ -15,32 +16,37 @@ import 'screens/onboarding.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // الاتصال وحده قبل الإقلاع — الباقي يجري أثناء شاشة البداية المتحرّكة
   await Supabase.initialize(url: kUrl, anonKey: kKey);
-  // الثلاثة تفشل بصمت ولا توقف الإقلاع
-  await Content.load();
-  await Cities.load();
-  await Push.init();
-
-  // عند فشل القراءة نفترض أنه رآها — تكرارها كل إقلاع أسوأ من تخطّيها
-  bool seen = true;
-  try {
-    final p = await SharedPreferences.getInstance();
-    seen = p.getBool(kOnboardingSeenKey) ?? false;
-  } catch (_) {}
-
-  runApp(App(showOnboarding: !seen));
+  runApp(const App());
 }
 
 class App extends StatefulWidget {
-  final bool showOnboarding;
-  const App({super.key, required this.showOnboarding});
-
+  const App({super.key});
   @override
   State<App> createState() => _AppState();
 }
 
 class _AppState extends State<App> {
-  late bool _onboarding = widget.showOnboarding;
+  bool _booting = true;
+  bool _onboarding = false;
+
+  /// كل ما كان يؤخّر الإقلاع سابقاً — يجري الآن خلف الحركة.
+  /// الثلاثة تفشل بصمت ولا توقف شيئاً.
+  Future<void> _boot() async {
+    await Future.wait([
+      Content.load(),
+      Cities.load(),
+      Push.init(),
+    ]);
+    // عند فشل القراءة نفترض أنه رآها — تكرارها كل إقلاع أسوأ من تخطّيها
+    bool seen = true;
+    try {
+      final p = await SharedPreferences.getInstance();
+      seen = p.getBool(kOnboardingSeenKey) ?? false;
+    } catch (_) {}
+    _onboarding = !seen;
+  }
 
   @override
   Widget build(BuildContext ctx) {
@@ -58,10 +64,20 @@ class _AppState extends State<App> {
       theme: b.copyWith(textTheme: GoogleFonts.tajawalTextTheme(b.textTheme)),
       builder: (_, c) =>
           Directionality(textDirection: TextDirection.rtl, child: c!),
-      home: _onboarding
-          ? OnboardingScreen(
-              onFinish: () => setState(() => _onboarding = false))
-          : const Shell(),
+      home: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 420),
+        child: _booting
+            ? AnimatedSplash(
+                key: const ValueKey('splash'),
+                work: _boot,
+                onDone: () => setState(() => _booting = false),
+              )
+            : _onboarding
+                ? OnboardingScreen(
+                    key: const ValueKey('onboarding'),
+                    onFinish: () => setState(() => _onboarding = false))
+                : const Shell(key: ValueKey('shell')),
+      ),
     );
   }
 }
