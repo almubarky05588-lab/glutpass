@@ -151,17 +151,21 @@ class _FoodPainter extends CustomPainter {
     final p = Paint()
       ..color = Colors.white
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 4.6 * s
+      ..strokeWidth = 5 * s
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round
+      ..isAntiAlias = true;
+    final fill = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.fill
       ..isAntiAlias = true;
 
     switch (kind) {
       case 0:
-        _burger(canvas, s, p);
+        _burger(canvas, s, p, fill);
         break;
       case 1:
-        _pizza(canvas, s, p);
+        _pizza(canvas, s, p, fill);
         break;
       case 2:
         _cake(canvas, s, p);
@@ -171,89 +175,91 @@ class _FoodPainter extends CustomPainter {
     }
   }
 
-  void _burger(Canvas c, double s, Paint p) {
+  void _burger(Canvas c, double s, Paint p, Paint f) {
+    // الخبزة العليا
     final top = Path()
-      ..moveTo(14 * s, 42 * s)
-      ..cubicTo(14 * s, 20 * s, 86 * s, 20 * s, 86 * s, 42 * s);
+      ..moveTo(18 * s, 40 * s)
+      ..cubicTo(18 * s, 24 * s, 82 * s, 24 * s, 82 * s, 40 * s)
+      ..close();
     c.drawPath(top, p);
-    final dot = Paint()
-      ..color = Colors.white
-      ..style = PaintingStyle.fill;
-    c.drawCircle(Offset(38 * s, 31 * s), 2.4 * s, dot);
-    c.drawCircle(Offset(52 * s, 27 * s), 2.4 * s, dot);
-    c.drawCircle(Offset(64 * s, 33 * s), 2.4 * s, dot);
+    // السمسم
+    c.drawCircle(Offset(40 * s, 33 * s), 2.6 * s, f);
+    c.drawCircle(Offset(52 * s, 30 * s), 2.6 * s, f);
+    c.drawCircle(Offset(63 * s, 34 * s), 2.6 * s, f);
+    // الخس
     final lettuce = Path()
-      ..moveTo(14 * s, 46 * s)
-      ..lineTo(24 * s, 53 * s)
-      ..lineTo(38 * s, 46 * s)
-      ..lineTo(52 * s, 53 * s)
-      ..lineTo(66 * s, 46 * s)
-      ..lineTo(78 * s, 53 * s)
-      ..lineTo(86 * s, 46 * s);
+      ..moveTo(18 * s, 47 * s)
+      ..cubicTo(26 * s, 42 * s, 34 * s, 52 * s, 42 * s, 47 * s)
+      ..cubicTo(50 * s, 42 * s, 58 * s, 52 * s, 66 * s, 47 * s)
+      ..cubicTo(74 * s, 42 * s, 78 * s, 50 * s, 82 * s, 47 * s);
     c.drawPath(lettuce, p);
+    // اللحم
     c.drawRRect(
-        RRect.fromLTRBR(16 * s, 57 * s, 84 * s, 68 * s, Radius.circular(5 * s)),
+        RRect.fromLTRBR(19 * s, 55 * s, 81 * s, 67 * s, Radius.circular(6 * s)),
         p);
+    // الخبزة السفلى
     final bot = Path()
-      ..moveTo(14 * s, 72 * s)
-      ..lineTo(14 * s, 76 * s)
-      ..cubicTo(14 * s, 86 * s, 86 * s, 86 * s, 86 * s, 76 * s)
-      ..lineTo(86 * s, 72 * s);
+      ..moveTo(18 * s, 73 * s)
+      ..cubicTo(18 * s, 85 * s, 82 * s, 85 * s, 82 * s, 73 * s)
+      ..close();
     c.drawPath(bot, p);
   }
 
-  void _pizza(Canvas c, double s, Paint p) {
+  void _pizza(Canvas c, double s, Paint p, Paint f) {
+    // الشريحة
     final tri = Path()
-      ..moveTo(50 * s, 88 * s)
-      ..lineTo(20 * s, 30 * s)
-      ..lineTo(80 * s, 30 * s)
+      ..moveTo(50 * s, 86 * s)
+      ..lineTo(22 * s, 32 * s)
+      ..cubicTo(40 * s, 24 * s, 60 * s, 24 * s, 78 * s, 32 * s)
       ..close();
     c.drawPath(tri, p);
+    // القشرة
     final crust = Path()
-      ..moveTo(20 * s, 30 * s)
-      ..cubicTo(30 * s, 16 * s, 70 * s, 16 * s, 80 * s, 30 * s);
+      ..moveTo(22 * s, 32 * s)
+      ..cubicTo(40 * s, 22 * s, 60 * s, 22 * s, 78 * s, 32 * s);
     c.drawPath(crust, p);
-    final fill = Paint()
-      ..color = Colors.white
-      ..style = PaintingStyle.fill;
-    c.drawCircle(Offset(40 * s, 45 * s), 4.2 * s, fill);
-    c.drawCircle(Offset(60 * s, 44 * s), 4.2 * s, fill);
-    c.drawCircle(Offset(50 * s, 63 * s), 4.2 * s, fill);
+    // البيبروني
+    c.drawCircle(Offset(42 * s, 46 * s), 4.5 * s, f);
+    c.drawCircle(Offset(60 * s, 48 * s), 4.5 * s, f);
+    c.drawCircle(Offset(50 * s, 64 * s), 4.5 * s, f);
   }
 
   void _cake(Canvas c, double s, Paint p) {
-    final wedge = Path()
-      ..moveTo(20 * s, 74 * s)
-      ..lineTo(20 * s, 44 * s)
-      ..lineTo(80 * s, 30 * s)
-      ..lineTo(80 * s, 60 * s)
+    // الوجه الأمامي
+    final body = Path()
+      ..moveTo(26 * s, 74 * s)
+      ..lineTo(26 * s, 46 * s)
+      ..lineTo(74 * s, 34 * s)
+      ..lineTo(74 * s, 62 * s)
       ..close();
-    c.drawPath(wedge, p);
-    final base = Path()
-      ..moveTo(20 * s, 65 * s)
-      ..lineTo(80 * s, 51 * s);
-    c.drawPath(base, p);
-    c.drawCircle(Offset(64 * s, 27 * s), 5 * s, p);
-    final stem = Path()
-      ..moveTo(64 * s, 22 * s)
-      ..cubicTo(66 * s, 14 * s, 72 * s, 13 * s, 74 * s, 15 * s);
-    c.drawPath(stem, p);
+    c.drawPath(body, p);
+    // القشدة المتموّجة أعلاه
+    final cream = Path()
+      ..moveTo(26 * s, 46 * s)
+      ..cubicTo(34 * s, 40 * s, 40 * s, 50 * s, 48 * s, 44 * s)
+      ..cubicTo(56 * s, 38 * s, 62 * s, 46 * s, 74 * s, 34 * s);
+    c.drawPath(cream, p);
+    // خط الطبقة السفلى
+    final layer = Path()
+      ..moveTo(26 * s, 62 * s)
+      ..lineTo(74 * s, 50 * s);
+    c.drawPath(layer, p);
+    // الكرزة
+    c.drawCircle(Offset(62 * s, 30 * s), 5 * s, p);
   }
 
   void _drum(Canvas c, double s, Paint p) {
-    final meat = Path()
-      ..moveTo(30 * s, 20 * s)
-      ..cubicTo(52 * s, 10 * s, 70 * s, 26 * s, 62 * s, 46 * s)
-      ..cubicTo(56 * s, 60 * s, 34 * s, 62 * s, 24 * s, 50 * s)
-      ..cubicTo(16 * s, 40 * s, 18 * s, 26 * s, 30 * s, 20 * s)
+    // مسار واحد متصل — اللحم يضيق إلى العظم ثم فصّا طرفه
+    final leg = Path()
+      ..moveTo(30 * s, 74 * s)
+      ..cubicTo(22 * s, 78 * s, 23 * s, 88 * s, 32 * s, 86 * s)
+      ..cubicTo(35 * s, 93 * s, 45 * s, 90 * s, 43 * s, 83 * s)
+      ..lineTo(56 * s, 62 * s)
+      ..cubicTo(66 * s, 70 * s, 80 * s, 62 * s, 81 * s, 46 * s)
+      ..cubicTo(82 * s, 28 * s, 66 * s, 16 * s, 51 * s, 21 * s)
+      ..cubicTo(36 * s, 26 * s, 31 * s, 42 * s, 39 * s, 54 * s)
       ..close();
-    c.drawPath(meat, p);
-    final bone = Path()
-      ..moveTo(50 * s, 54 * s)
-      ..lineTo(68 * s, 72 * s);
-    c.drawPath(bone, p);
-    c.drawCircle(Offset(74 * s, 72 * s), 6.5 * s, p);
-    c.drawCircle(Offset(68 * s, 79 * s), 6.5 * s, p);
+    c.drawPath(leg, p..strokeWidth = 4.5 * s);
   }
 
   @override
