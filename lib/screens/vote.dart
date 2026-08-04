@@ -16,14 +16,24 @@ class _VoteScreenState extends State<VoteScreen> {
   String? _exp;
   int _stars = 0;
   bool _busy = false;
+  bool _checking = true;
   String? _msg;
   bool _done = false;
+
+  /// التصويت السابق لهذا المستخدم على نفس المكان/الطبق — إن وُجد
+  Map<String, dynamic>? _prev;
 
   static const opts = [
     ['SAFE_NO_SYMPTOMS', 'آمن تماماً، لا أعراض'],
     ['MILD_SYMPTOMS', 'أعراض خفيفة'],
     ['NOT_SAFE', 'غير آمن'],
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    _checkPrevious();
+  }
 
   IconData _icon(String k) => k == 'SAFE_NO_SYMPTOMS'
       ? Icons.sentiment_satisfied_alt
@@ -36,6 +46,39 @@ class _VoteScreenState extends State<VoteScreen> {
       : k == 'MILD_SYMPTOMS'
           ? cAmber
           : const Color(0xFFC0392B);
+
+  String _label(String k) =>
+      opts.firstWhere((o) => o[0] == k, orElse: () => ['', '—'])[1];
+
+  /// الفهرس الفريد على (user, place, dish) يمنع التكرار في القاعدة،
+  /// لكننا نفحص مسبقاً لنُظهر تنبيهاً واضحاً بدل خطأ تقني.
+  Future<void> _checkPrevious() async {
+    final c = Supabase.instance.client;
+    final u = c.auth.currentUser;
+    if (u == null) {
+      if (mounted) setState(() => _checking = false);
+      return;
+    }
+    try {
+      var q = c
+          .from('votes')
+          .select('safety_experience,star_rating,comment,visited_at')
+          .eq('user_id', u.id)
+          .eq('place_id', widget.place.id);
+      q = widget.dish == null
+          ? q.isFilter('dish_id', null)
+          : q.eq('dish_id', widget.dish!.id);
+      final r = await q.maybeSingle();
+      if (mounted) {
+        setState(() {
+          _prev = r;
+          _checking = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _checking = false);
+    }
+  }
 
   Future<void> _send() async {
     final c = Supabase.instance.client;
@@ -53,7 +96,7 @@ class _VoteScreenState extends State<VoteScreen> {
       _msg = null;
     });
     try {
-      final data = {
+      await c.from('votes').insert({
         'user_id': u.id,
         'place_id': widget.place.id,
         'dish_id': widget.dish?.id,
@@ -61,9 +104,18 @@ class _VoteScreenState extends State<VoteScreen> {
         'star_rating': _stars == 0 ? null : _stars,
         'comment': _comment.text.trim().isEmpty ? null : _comment.text.trim(),
         'visited_at': DateTime.now().toIso8601String().substring(0, 10),
-      };
-      await c.from('votes').upsert(data, onConflict: 'user_id,place_id,dish_id');
+      });
       setState(() => _done = true);
+    } on PostgrestException catch (e) {
+      // 23505 = خرق الفهرس الفريد — أي أنه صوّت من جهاز آخر بين الفحص والإرسال
+      if (e.code == '23505') {
+        await _checkPrevious();
+        if (mounted) {
+          setState(() => _msg = 'لقد سجّلت تجربتك مسبقاً لهذا العنصر');
+        }
+      } else {
+        setState(() => _msg = e.message);
+      }
     } catch (e) {
       setState(() => _msg = '$e');
     } finally {
@@ -75,7 +127,15 @@ class _VoteScreenState extends State<VoteScreen> {
   Widget build(BuildContext ctx) {
     return Scaffold(
       backgroundColor: cBg,
-      body: SafeArea(child: _done ? _thanks(ctx) : _form(ctx)),
+      body: SafeArea(
+        child: _checking
+            ? const Center(child: CircularProgressIndicator(color: cGreen))
+            : _done
+                ? _thanks(ctx)
+                : _prev != null
+                    ? _alreadyVoted(ctx)
+                    : _form(ctx),
+      ),
     );
   }
 
@@ -113,6 +173,115 @@ class _VoteScreenState extends State<VoteScreen> {
           ]),
         ),
       );
+
+  /// تنبيه أنه صوّت مسبقاً — مع عرض تجربته السابقة
+  Widget _alreadyVoted(BuildContext ctx) {
+    final p = _prev!;
+    final k = (p['safety_experience'] as String?) ?? '';
+    final stars = (p['star_rating'] as num?)?.toInt();
+    final cm = (p['comment'] as String?)?.trim();
+    final target = widget.dish?.nameAr ?? widget.place.nameAr;
+    final c = _color(k);
+
+    return ListView(
+      padding: const EdgeInsets.all(24),
+      children: [
+        Row(children: [
+          IconButton(
+              onPressed: () => Navigator.pop(ctx),
+              icon: const Icon(Icons.arrow_back_ios, size: 18, color: cDark)),
+          const Spacer(),
+          const Text('تجربتك مسجّلة',
+              style: TextStyle(
+                  fontSize: 19, fontWeight: FontWeight.w700, color: cDark)),
+          const Spacer(),
+          const SizedBox(width: 44),
+        ]),
+        const SizedBox(height: 24),
+        Center(
+          child: Container(
+            width: 84,
+            height: 84,
+            alignment: Alignment.center,
+            decoration:
+                const BoxDecoration(color: cAmberBg, shape: BoxShape.circle),
+            child: const Icon(Icons.how_to_vote_outlined,
+                color: cAmber, size: 40),
+          ),
+        ),
+        const SizedBox(height: 20),
+        Text('صوّتّ على «$target» مسبقاً',
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+                fontSize: 19, fontWeight: FontWeight.w700, color: cDark)),
+        const SizedBox(height: 8),
+        const Text(
+            'لكل مستخدم تجربة واحدة لكل مطعم وطبق، حتى يبقى التصنيف '
+            'معبّراً عن عدد حقيقي من الناس.',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 13, color: cGrey, height: 1.7)),
+        const SizedBox(height: 24),
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: cBorder)),
+          child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Row(children: [
+                  Text('تجربتك المسجّلة',
+                      style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w700,
+                          color: cGrey)),
+                ]),
+                const SizedBox(height: 12),
+                Row(children: [
+                  Icon(_icon(k), color: c, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(_label(k),
+                        style: TextStyle(
+                            fontSize: 14.5,
+                            fontWeight: FontWeight.w700,
+                            color: c)),
+                  ),
+                ]),
+                if (stars != null) ...[
+                  const SizedBox(height: 12),
+                  Row(children: List.generate(5, (i) {
+                    final full = stars >= i + 1;
+                    return Icon(full ? Icons.star : Icons.star_border,
+                        size: 19,
+                        color: full ? const Color(0xFFF2B01E) : cStar);
+                  })),
+                ],
+                if (cm != null && cm.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Text(cm,
+                      textAlign: TextAlign.start,
+                      style: const TextStyle(
+                          fontSize: 13, color: cDark, height: 1.65)),
+                ],
+              ]),
+        ),
+        const SizedBox(height: 26),
+        FilledButton(
+          onPressed: () => Navigator.pop(ctx),
+          style: FilledButton.styleFrom(
+              backgroundColor: cGreen,
+              minimumSize: const Size.fromHeight(52),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(15))),
+          child: const Text('رجوع',
+              style: TextStyle(fontSize: 15.5, fontWeight: FontWeight.w700)),
+        ),
+        const SizedBox(height: 40),
+      ],
+    );
+  }
 
   Widget _form(BuildContext ctx) => ListView(
         padding: const EdgeInsets.all(20),
@@ -162,9 +331,12 @@ class _VoteScreenState extends State<VoteScreen> {
             ]),
           ),
           const SizedBox(height: 22),
-          const Row(children: [
-            Text('هل كان آمناً عليك؟',
-                style: TextStyle(
+          Row(children: [
+            Text(
+                widget.dish == null
+                    ? 'هل كان آمناً عليك؟'
+                    : 'هل كان الطبق آمناً عليك؟',
+                style: const TextStyle(
                     fontSize: 16, fontWeight: FontWeight.w700, color: cDark)),
           ]),
           const SizedBox(height: 10),
@@ -256,7 +428,14 @@ class _VoteScreenState extends State<VoteScreen> {
               style: const TextStyle(fontSize: 14, color: cDark),
             ),
           ),
-          const SizedBox(height: 22),
+          const SizedBox(height: 12),
+          const Row(children: [
+            Expanded(
+              child: Text('تُسجَّل التجربة مرة واحدة لكل مطعم وطبق',
+                  style: TextStyle(fontSize: 11.5, color: cGrey)),
+            ),
+          ]),
+          const SizedBox(height: 14),
           FilledButton(
             onPressed: _busy ? null : _send,
             style: FilledButton.styleFrom(
