@@ -50,6 +50,11 @@ class _VoteScreenState extends State<VoteScreen> {
   String _label(String k) =>
       opts.firstWhere((o) => o[0] == k, orElse: () => ['', '—'])[1];
 
+  /// صورة الطبق حين نقيّم طبقاً، وشعار المطعم حين نقيّم المطعم نفسه
+  Widget _thumb({double size = 46}) => widget.dish != null
+      ? DishThumb(widget.dish!, size: size, radius: 13)
+      : PlaceAvatar(widget.place, size: size);
+
   /// الفهرس الفريد على (user, place, dish) يمنع التكرار في القاعدة،
   /// لكننا نفحص مسبقاً لنُظهر تنبيهاً واضحاً بدل خطأ تقني.
   Future<void> _checkPrevious() async {
@@ -198,17 +203,7 @@ class _VoteScreenState extends State<VoteScreen> {
           const SizedBox(width: 44),
         ]),
         const SizedBox(height: 24),
-        Center(
-          child: Container(
-            width: 84,
-            height: 84,
-            alignment: Alignment.center,
-            decoration:
-                const BoxDecoration(color: cAmberBg, shape: BoxShape.circle),
-            child: const Icon(Icons.how_to_vote_outlined,
-                color: cAmber, size: 40),
-          ),
-        ),
+        Center(child: _thumb(size: 84)),
         const SizedBox(height: 20),
         Text('صوّتّ على «$target» مسبقاً',
             textAlign: TextAlign.center,
@@ -305,8 +300,8 @@ class _VoteScreenState extends State<VoteScreen> {
                 borderRadius: BorderRadius.circular(18),
                 border: Border.all(color: cBorder)),
             child: Row(children: [
-              PlaceAvatar(widget.place, size: 46),
-              const SizedBox(width: 10),
+              _thumb(size: 52),
+              const SizedBox(width: 11),
               Expanded(
                 child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
