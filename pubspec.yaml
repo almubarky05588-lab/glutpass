@@ -29,6 +29,10 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  # الصورتان تُحزَمان مع التطبيق لتستخدمهما شاشة البداية المتحرّكة،
+  # فتطابق الصورة الثابتة بكسلاً ببكسل بلا أي قفزة
+  assets:
+    - assets/brand/
 
 flutter_launcher_icons:
   ios: true
