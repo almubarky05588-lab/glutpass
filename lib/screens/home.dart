@@ -90,8 +90,6 @@ class _HomeScreenState extends State<HomeScreen> {
             Text('الأكثر تصويتاً',
                 style: TextStyle(
                     color: cDark, fontSize: 17, fontWeight: FontWeight.w700)),
-            Spacer(),
-            Text('عرض الكل', style: TextStyle(color: cGreen, fontSize: 13)),
           ])),
           const SizedBox(height: 10),
           if (ps.isEmpty)
@@ -139,15 +137,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 Text('مجتمع خالي من الجلوتين',
                     style: TextStyle(color: Colors.white70, fontSize: 12)),
               ]),
-          const Spacer(),
-          Container(
-              width: 46,
-              height: 46,
-              decoration: BoxDecoration(
-                  color: Colors.white24,
-                  borderRadius: BorderRadius.circular(14)),
-              child: const Icon(Icons.person_outline,
-                  color: Colors.white, size: 22)),
         ]),
       );
 
