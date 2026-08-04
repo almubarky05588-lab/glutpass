@@ -552,7 +552,7 @@ class _DetailsScreenState extends State<DetailsScreen> {
                   ]),
             ),
             const SizedBox(width: 6),
-            const Icon(Icons.arrow_back_ios, size: 14, color: cGrey),
+            const Icon(Icons.arrow_forward_ios, size: 14, color: cGrey),
           ]),
         ),
       );
