@@ -1,12 +1,11 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
-import 'content.dart';
-import 'core.dart';
-import 'screens/onboarding.dart';
 
-/// شاشة البداية المتحرّكة — تُعرض داخل التطبيق مباشرةً بعد الصورة الثابتة
-/// التي يرسمها النظام. تخطيطها مطابق لها تماماً فلا يرى المستخدم انتقالاً،
-/// ثم تدبّ فيها الحركة. وتستغل وقت التحميل بدل أن يضيع في شاشة جامدة.
+/// شاشة البداية المتحرّكة.
+///
+/// تستخدم **نفس** صورتَي شاشة البداية الثابتة التي يرسمها النظام،
+/// بنفس المقاسات وطريقة العرض. فالانتقال بينهما غير مرئي بحكم البناء
+/// لا بحكم التقدير — ولا نعيد رسم الشعار أو النصوص فتختلف.
 class AnimatedSplash extends StatefulWidget {
   final Future<void> Function() work;
   final VoidCallback onDone;
@@ -21,12 +20,19 @@ class _AnimatedSplashState extends State<AnimatedSplash>
   late final AnimationController _c;
   bool _finished = false;
 
-  static const _minShow = Duration(milliseconds: 2000);
+  // مدة الحركة أطول من مدة العرض عمداً: العناصر لا تكمل سقوطها
+  // فتبدو مستمرة لا مقطوعة، والشاشة تخرج وهي في منتصف الحركة.
+  static const _spin = Duration(milliseconds: 2800);
+  static const _minShow = Duration(milliseconds: 2400);
+
+  /// مقاس صورة الشعار بالنقاط — الصورة مصدَّرة بكثافة ٤×
+  /// والنظام يعرضها مقسومة على ٤، فنطابقه تماماً.
+  static const _artWidth = 1040 / 4;
 
   @override
   void initState() {
     super.initState();
-    _c = AnimationController(vsync: this, duration: _minShow)..forward();
+    _c = AnimationController(vsync: this, duration: _spin)..forward();
     _run();
   }
 
@@ -55,71 +61,33 @@ class _AnimatedSplashState extends State<AnimatedSplash>
     final size = MediaQuery.of(ctx).size;
     return Scaffold(
       backgroundColor: const Color(0xFF146C43),
-      body: Stack(children: [
-        // الخلفية — نفس تدرّج الصورة الثابتة
-        Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [Color(0xFF0E5A37), Color(0xFF146C43)],
-            ),
-          ),
-        ),
-        // البصمة المائية أسفل يسار — كما في الصورة الثابتة
-        Positioned(
-          right: -60,
-          top: size.height * 0.57,
-          child: Opacity(
-            opacity: 0.07,
-            child: GlutMark(width: 300, color: Colors.white),
-          ),
-        ),
-        // المأكولات المتساقطة
+      body: Stack(fit: StackFit.expand, children: [
+        // الخلفية — نفس ملف الصورة الثابتة، وفيها التدرّج والبصمة ورقم الإصدار
+        Image.asset('assets/brand/background.png',
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) => Container(
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [Color(0xFF0E5A37), Color(0xFF146C43)],
+                    ),
+                  ),
+                )),
+        // المأكولات تسقط بين الخلفية والشعار
         AnimatedBuilder(
           animation: _c,
           builder: (_, __) => Stack(
-            children: _items
-                .map((it) => _positioned(it, _c.value, size))
-                .toList(),
+            children:
+                _items.map((it) => _positioned(it, _c.value, size)).toList(),
           ),
         ),
-        // الكتلة الوسطى — مزاحة ٤٣ نقطة للأعلى لتطابق موضعها في الصورة الثابتة
+        // الشعار والنصوص — نفس الملف الذي يعرضه النظام، موسّطاً كما يوسّطه
         Center(
-          child: Transform.translate(
-            offset: const Offset(0, -43),
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              Container(
-                width: 156,
-                height: 156,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(44)),
-                child: const GlutMark(width: 92),
-              ),
-              const SizedBox(height: 40),
-              const Text('GlutPass',
-                  style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 30,
-                      fontWeight: FontWeight.w700)),
-              const SizedBox(height: 12),
-              Text(Content.t('splash.tagline'),
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                      color: Color(0xFFCFE6D8), fontSize: 13)),
-            ]),
-          ),
-        ),
-        Positioned(
-          bottom: 26,
-          right: 0,
-          left: 0,
-          child: Text('الإصدار ١٫٠',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.45), fontSize: 11)),
+          child: Image.asset('assets/brand/splash.png',
+              width: _artWidth,
+              fit: BoxFit.contain,
+              errorBuilder: (_, __, ___) => const SizedBox.shrink()),
         ),
       ]),
     );
@@ -131,16 +99,16 @@ class _AnimatedSplashState extends State<AnimatedSplash>
     if (t <= 0) return const SizedBox.shrink();
     final y = -it.size + (size.height + it.size * 2) * t;
     // تلاشٍ عند الطرفين حتى لا تظهر أو تختفي فجأة
-    final fade = t < 0.12
-        ? t / 0.12
-        : t > 0.88
-            ? (1 - t) / 0.12
+    final fade = t < 0.14
+        ? t / 0.14
+        : t > 0.86
+            ? (1 - t) / 0.14
             : 1.0;
     return Positioned(
       left: it.x * size.width - it.size / 2,
       top: y - it.size / 2,
       child: Opacity(
-        opacity: 0.16 * fade,
+        opacity: 0.20 * fade,
         child: Transform.rotate(
           angle: it.spin * t * 2 * math.pi,
           child: SizedBox(
@@ -153,16 +121,16 @@ class _AnimatedSplashState extends State<AnimatedSplash>
     );
   }
 
-  // ترتيب مدروس: لا يتزاحمان في عمود واحد، والأحجام متفاوتة
+  // الأعمدة متباعدة والأحجام متفاوتة، والمدد طويلة حتى تُميَّز الأشكال
   static const _items = <_Falling>[
-    _Falling(0, 0.16, 62, 0.00, 0.72, 0.35),
-    _Falling(1, 0.78, 54, 0.06, 0.66, -0.30),
-    _Falling(2, 0.42, 46, 0.14, 0.70, 0.24),
-    _Falling(3, 0.90, 58, 0.20, 0.62, -0.40),
-    _Falling(1, 0.28, 42, 0.30, 0.58, 0.28),
-    _Falling(0, 0.62, 50, 0.36, 0.60, -0.22),
-    _Falling(3, 0.08, 44, 0.44, 0.54, 0.32),
-    _Falling(2, 0.86, 48, 0.52, 0.48, -0.26),
+    _Falling(0, 0.15, 76, 0.00, 0.86, 0.22),
+    _Falling(1, 0.80, 66, 0.05, 0.80, -0.18),
+    _Falling(2, 0.45, 58, 0.11, 0.84, 0.16),
+    _Falling(3, 0.92, 70, 0.16, 0.78, -0.24),
+    _Falling(1, 0.30, 54, 0.21, 0.82, 0.20),
+    _Falling(0, 0.65, 62, 0.25, 0.76, -0.14),
+    _Falling(3, 0.06, 56, 0.29, 0.80, 0.18),
+    _Falling(2, 0.88, 60, 0.33, 0.75, -0.20),
   ];
 }
 
@@ -204,19 +172,16 @@ class _FoodPainter extends CustomPainter {
   }
 
   void _burger(Canvas c, double s, Paint p) {
-    // الخبزة العليا
     final top = Path()
       ..moveTo(14 * s, 42 * s)
       ..cubicTo(14 * s, 20 * s, 86 * s, 20 * s, 86 * s, 42 * s);
     c.drawPath(top, p);
-    // حبات السمسم
     final dot = Paint()
       ..color = Colors.white
       ..style = PaintingStyle.fill;
     c.drawCircle(Offset(38 * s, 31 * s), 2.4 * s, dot);
     c.drawCircle(Offset(52 * s, 27 * s), 2.4 * s, dot);
     c.drawCircle(Offset(64 * s, 33 * s), 2.4 * s, dot);
-    // الخس
     final lettuce = Path()
       ..moveTo(14 * s, 46 * s)
       ..lineTo(24 * s, 53 * s)
@@ -226,11 +191,9 @@ class _FoodPainter extends CustomPainter {
       ..lineTo(78 * s, 53 * s)
       ..lineTo(86 * s, 46 * s);
     c.drawPath(lettuce, p);
-    // قطعة اللحم
     c.drawRRect(
         RRect.fromLTRBR(16 * s, 57 * s, 84 * s, 68 * s, Radius.circular(5 * s)),
         p);
-    // الخبزة السفلى
     final bot = Path()
       ..moveTo(14 * s, 72 * s)
       ..lineTo(14 * s, 76 * s)
@@ -240,19 +203,16 @@ class _FoodPainter extends CustomPainter {
   }
 
   void _pizza(Canvas c, double s, Paint p) {
-    // المثلث
     final tri = Path()
       ..moveTo(50 * s, 88 * s)
       ..lineTo(20 * s, 30 * s)
       ..lineTo(80 * s, 30 * s)
       ..close();
     c.drawPath(tri, p);
-    // القشرة
     final crust = Path()
       ..moveTo(20 * s, 30 * s)
       ..cubicTo(30 * s, 16 * s, 70 * s, 16 * s, 80 * s, 30 * s);
     c.drawPath(crust, p);
-    // شرائح البيبروني
     final fill = Paint()
       ..color = Colors.white
       ..style = PaintingStyle.fill;
@@ -262,7 +222,6 @@ class _FoodPainter extends CustomPainter {
   }
 
   void _cake(Canvas c, double s, Paint p) {
-    // شريحة من الجانب
     final wedge = Path()
       ..moveTo(20 * s, 74 * s)
       ..lineTo(20 * s, 44 * s)
@@ -270,12 +229,10 @@ class _FoodPainter extends CustomPainter {
       ..lineTo(80 * s, 60 * s)
       ..close();
     c.drawPath(wedge, p);
-    // خط القاعدة البسكويتية
     final base = Path()
       ..moveTo(20 * s, 65 * s)
       ..lineTo(80 * s, 51 * s);
     c.drawPath(base, p);
-    // حبة الكرز
     c.drawCircle(Offset(64 * s, 27 * s), 5 * s, p);
     final stem = Path()
       ..moveTo(64 * s, 22 * s)
@@ -284,7 +241,6 @@ class _FoodPainter extends CustomPainter {
   }
 
   void _drum(Canvas c, double s, Paint p) {
-    // اللحم
     final meat = Path()
       ..moveTo(30 * s, 20 * s)
       ..cubicTo(52 * s, 10 * s, 70 * s, 26 * s, 62 * s, 46 * s)
@@ -292,7 +248,6 @@ class _FoodPainter extends CustomPainter {
       ..cubicTo(16 * s, 40 * s, 18 * s, 26 * s, 30 * s, 20 * s)
       ..close();
     c.drawPath(meat, p);
-    // العظم
     final bone = Path()
       ..moveTo(50 * s, 54 * s)
       ..lineTo(68 * s, 72 * s);
