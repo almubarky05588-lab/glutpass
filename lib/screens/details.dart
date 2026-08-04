@@ -180,9 +180,13 @@ class _DetailsScreenState extends State<DetailsScreen> {
     }
   }
 
-  void _snack(String t) {
+  void _snack(String t, {bool ok = false}) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t)));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(t, style: const TextStyle(fontSize: 13)),
+      backgroundColor: ok ? cGreen : cAmber,
+      behavior: SnackBarBehavior.floating,
+    ));
   }
 
   Future<void> _vote({Dish? dish}) async {
@@ -216,6 +220,184 @@ class _DetailsScreenState extends State<DetailsScreen> {
       _snack('تعذّر فتح تطبيق الخرائط');
     }
   }
+
+  // ─────────── إضافة طبق ───────────
+
+  /// رسائل الدالة add_dish مترجمة — الخادم يرمي رموزاً ثابتة
+  String _dishError(String raw) {
+    if (raw.contains('AUTH_REQUIRED')) {
+      return 'سجّل الدخول من تبويب «حسابي» أولاً';
+    }
+    if (raw.contains('NAME_TOO_SHORT')) return 'اسم الطبق قصير جداً';
+    if (raw.contains('NAME_TOO_LONG')) return 'اسم الطبق طويل جداً';
+    if (raw.contains('PRICE_INVALID')) return 'السعر غير منطقي';
+    if (raw.contains('BANNED_WORD')) return 'الاسم يحتوي كلمة غير مسموحة';
+    if (raw.contains('DISH_EXISTS')) return 'هذا الطبق مضاف مسبقاً';
+    if (raw.contains('PLACE_NOT_FOUND')) return 'المكان غير متاح';
+    return 'تعذّر إضافة الطبق — حاول مرة أخرى';
+  }
+
+  void _addDishSheet() {
+    if (Supabase.instance.client.auth.currentUser == null) {
+      _snack('سجّل الدخول من تبويب «حسابي» أولاً');
+      return;
+    }
+    final nameAr = TextEditingController();
+    final nameEn = TextEditingController();
+    final price = TextEditingController();
+    bool busy = false;
+    String? err;
+
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.white,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (sctx) => StatefulBuilder(
+        builder: (sctx, setS) => Padding(
+          padding: EdgeInsets.only(
+              bottom: MediaQuery.of(sctx).viewInsets.bottom),
+          child: SafeArea(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(22, 10, 22, 18),
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                Container(
+                    width: 42,
+                    height: 4,
+                    decoration: BoxDecoration(
+                        color: cBorder,
+                        borderRadius: BorderRadius.circular(2))),
+                const SizedBox(height: 18),
+                const Text('أضف طبقاً',
+                    style: TextStyle(
+                        fontSize: 19,
+                        fontWeight: FontWeight.w700,
+                        color: cDark)),
+                const SizedBox(height: 5),
+                Text('إلى ${_p.nameAr}',
+                    style: const TextStyle(fontSize: 12.5, color: cGrey)),
+                const SizedBox(height: 18),
+                _sheetField(nameAr, 'اسم الطبق', 'مثال: برجر دجاج بخبز خالٍ من الجلوتين'),
+                const SizedBox(height: 12),
+                _sheetField(nameEn, 'الاسم بالإنجليزية (اختياري)', 'GF Chicken Burger'),
+                const SizedBox(height: 12),
+                _sheetField(price, 'السعر بالريال (اختياري)', '45',
+                    number: true),
+                const SizedBox(height: 14),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                      color: cAmberBg,
+                      borderRadius: BorderRadius.circular(13)),
+                  child: const Row(children: [
+                    Icon(Icons.info_outline, size: 15, color: cAmber),
+                    SizedBox(width: 7),
+                    Expanded(
+                      child: Text(
+                          'يُضاف الطبق بحالة «تحقّق قبل الطلب»، ويتحدّد أمانه '
+                          'من تصويت المجتمع لا من ادّعاء المُضيف.',
+                          style: TextStyle(
+                              color: cAmber, fontSize: 11.5, height: 1.6)),
+                    ),
+                  ]),
+                ),
+                if (err != null) ...[
+                  const SizedBox(height: 12),
+                  Text(err!,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(color: cAmber, fontSize: 12.5)),
+                ],
+                const SizedBox(height: 18),
+                SizedBox(
+                  width: double.infinity,
+                  height: 52,
+                  child: FilledButton(
+                    onPressed: busy
+                        ? null
+                        : () async {
+                            setS(() {
+                              busy = true;
+                              err = null;
+                            });
+                            try {
+                              await Supabase.instance.client.rpc('add_dish',
+                                  params: {
+                                    'p_place': _p.id,
+                                    'p_name': nameAr.text,
+                                    'p_name_en': nameEn.text,
+                                    'p_price': price.text.trim().isEmpty
+                                        ? null
+                                        : num.tryParse(price.text.trim()),
+                                  });
+                              if (sctx.mounted) Navigator.pop(sctx);
+                              _snack('أُضيف الطبق — شكراً لمساهمتك',
+                                  ok: true);
+                              _refresh();
+                            } catch (e) {
+                              setS(() {
+                                busy = false;
+                                err = _dishError('$e');
+                              });
+                            }
+                          },
+                    style: FilledButton.styleFrom(
+                        backgroundColor: cGreen,
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(15))),
+                    child: busy
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                                color: Colors.white, strokeWidth: 2))
+                        : const Text('إضافة الطبق',
+                            style: TextStyle(
+                                fontSize: 15.5,
+                                fontWeight: FontWeight.w700)),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                TextButton(
+                    onPressed: () => Navigator.pop(sctx),
+                    child: const Text('إلغاء',
+                        style: TextStyle(color: cGrey, fontSize: 13.5))),
+              ]),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _sheetField(TextEditingController c, String label, String hint,
+          {bool number = false}) =>
+      Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(label,
+            style: const TextStyle(
+                fontSize: 12.5, fontWeight: FontWeight.w700, color: cDark)),
+        const SizedBox(height: 6),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          decoration: BoxDecoration(
+              color: cBg,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: cBorder)),
+          child: TextField(
+            controller: c,
+            textAlign: TextAlign.start,
+            keyboardType:
+                number ? TextInputType.number : TextInputType.text,
+            decoration: InputDecoration(
+                border: InputBorder.none,
+                isDense: true,
+                contentPadding: const EdgeInsets.symmetric(vertical: 15),
+                hintText: hint,
+                hintStyle: const TextStyle(color: cGrey, fontSize: 12.5)),
+            style: const TextStyle(fontSize: 14.5, color: cDark),
+          ),
+        ),
+      ]);
 
   @override
   Widget build(BuildContext ctx) {
@@ -473,19 +655,43 @@ class _DetailsScreenState extends State<DetailsScreen> {
   // ─────────── تبويب الأطباق ───────────
 
   List<Widget> _dishesTab(List<Dish> dishes) {
-    if (dishes.isEmpty) {
-      return [_empty(Icons.restaurant_menu, 'لا توجد أطباق مسجّلة بعد')];
-    }
     return [
-      const Padding(
-        padding: EdgeInsets.fromLTRB(20, 0, 20, 10),
+      Padding(
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
         child: Row(children: [
-          Text('أطباق موصى بها من المجتمع',
-              style: TextStyle(
-                  fontSize: 15, fontWeight: FontWeight.w700, color: cDark)),
+          const Expanded(
+            child: Text('أطباق موصى بها من المجتمع',
+                style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: cDark)),
+          ),
+          GestureDetector(
+            onTap: _addDishSheet,
+            behavior: HitTestBehavior.opaque,
+            child: Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+              decoration: BoxDecoration(
+                  color: cSafeBg, borderRadius: BorderRadius.circular(14)),
+              child: const Row(mainAxisSize: MainAxisSize.min, children: [
+                Icon(Icons.add, size: 15, color: cGreen),
+                SizedBox(width: 4),
+                Text('أضف طبقاً',
+                    style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w700,
+                        color: cGreen)),
+              ]),
+            ),
+          ),
         ]),
       ),
-      ...dishes.map(_dishCard),
+      if (dishes.isEmpty)
+        _empty(Icons.restaurant_menu,
+            'لا توجد أطباق مسجّلة بعد — كن أول من يضيف طبقاً')
+      else
+        ...dishes.map(_dishCard),
     ];
   }
 
