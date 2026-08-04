@@ -1,4 +1,6 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../core.dart';
@@ -6,7 +8,7 @@ import 'vote.dart';
 
 class Dish {
   final String id, nameAr, safety;
-  final String? nameEn;
+  final String? nameEn, imageUrl;
   final double? price, pct, rating;
   final int votes, ratingsCount;
   final bool rec;
@@ -15,6 +17,7 @@ class Dish {
       : id = m['id'] as String,
         nameAr = m['name_ar'] as String,
         nameEn = m['name_en'] as String?,
+        imageUrl = m['image_url'] as String?,
         safety = m['dish_safety_status'] as String,
         price = (m['price'] as num?)?.toDouble(),
         pct = (m['safe_experience_pct'] as num?)?.toDouble(),
@@ -28,10 +31,41 @@ class Dish {
   Color get fg => isSafe ? cGreen : cAmber;
   Color get bg => isSafe ? cSafeBg : cAmberBg;
   IconData get icon => isSafe ? Icons.check : Icons.info_outline;
+  bool get hasImage => imageUrl != null && imageUrl!.trim().isNotEmpty;
 
-  static const cols = 'id,name_ar,name_en,price,dish_safety_status,'
+  static const cols = 'id,name_ar,name_en,image_url,price,dish_safety_status,'
       'safe_experience_pct,safety_votes_count,avg_rating,ratings_count,'
       'is_recommended';
+}
+
+/// صورة الطبق — أو أيقونة محايدة حين لا توجد.
+/// لا نعرض شعار المطعم هنا لأنه يوحي بأنها صورة الطبق وهي ليست كذلك.
+class DishThumb extends StatelessWidget {
+  final Dish dish;
+  final double size;
+  final double radius;
+  const DishThumb(this.dish, {super.key, this.size = 58, this.radius = 14});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: cBg,
+        borderRadius: BorderRadius.circular(radius),
+        border: Border.all(color: cBorder),
+        image: dish.hasImage
+            ? DecorationImage(
+                image: NetworkImage(dish.imageUrl!), fit: BoxFit.cover)
+            : null,
+      ),
+      child: dish.hasImage
+          ? null
+          : Icon(Icons.restaurant_menu, color: cGrey, size: size * 0.42),
+    );
+  }
 }
 
 /// تجربة منشورة — تُقرأ من نافذة place_reviews الآمنة
@@ -231,6 +265,7 @@ class _DetailsScreenState extends State<DetailsScreen> {
     if (raw.contains('NAME_TOO_SHORT')) return 'اسم الطبق قصير جداً';
     if (raw.contains('NAME_TOO_LONG')) return 'اسم الطبق طويل جداً';
     if (raw.contains('PRICE_INVALID')) return 'السعر غير منطقي';
+    if (raw.contains('IMAGE_INVALID')) return 'رابط الصورة غير صالح';
     if (raw.contains('BANNED_WORD')) return 'الاسم يحتوي كلمة غير مسموحة';
     if (raw.contains('DISH_EXISTS')) return 'هذا الطبق مضاف مسبقاً';
     if (raw.contains('PLACE_NOT_FOUND')) return 'المكان غير متاح';
@@ -246,7 +281,10 @@ class _DetailsScreenState extends State<DetailsScreen> {
     final nameEn = TextEditingController();
     final price = TextEditingController();
     bool busy = false;
+    bool uploading = false;
     String? err;
+    String? imageUrl;
+    Uint8List? preview;
 
     showModalBottomSheet<void>(
       context: context,
@@ -255,117 +293,272 @@ class _DetailsScreenState extends State<DetailsScreen> {
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       builder: (sctx) => StatefulBuilder(
-        builder: (sctx, setS) => Padding(
-          padding: EdgeInsets.only(
-              bottom: MediaQuery.of(sctx).viewInsets.bottom),
-          child: SafeArea(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(22, 10, 22, 18),
-              child: Column(mainAxisSize: MainAxisSize.min, children: [
-                Container(
-                    width: 42,
-                    height: 4,
-                    decoration: BoxDecoration(
-                        color: cBorder,
-                        borderRadius: BorderRadius.circular(2))),
-                const SizedBox(height: 18),
-                const Text('أضف طبقاً',
-                    style: TextStyle(
-                        fontSize: 19,
-                        fontWeight: FontWeight.w700,
-                        color: cDark)),
-                const SizedBox(height: 5),
-                Text('إلى ${_p.nameAr}',
-                    style: const TextStyle(fontSize: 12.5, color: cGrey)),
-                const SizedBox(height: 18),
-                _sheetField(nameAr, 'اسم الطبق', 'مثال: برجر دجاج بخبز خالٍ من الجلوتين'),
-                const SizedBox(height: 12),
-                _sheetField(nameEn, 'الاسم بالإنجليزية (اختياري)', 'GF Chicken Burger'),
-                const SizedBox(height: 12),
-                _sheetField(price, 'السعر بالريال (اختياري)', '45',
-                    number: true),
-                const SizedBox(height: 14),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                      color: cAmberBg,
-                      borderRadius: BorderRadius.circular(13)),
-                  child: const Row(children: [
-                    Icon(Icons.info_outline, size: 15, color: cAmber),
-                    SizedBox(width: 7),
-                    Expanded(
-                      child: Text(
-                          'يُضاف الطبق بحالة «تحقّق قبل الطلب»، ويتحدّد أمانه '
-                          'من تصويت المجتمع لا من ادّعاء المُضيف.',
-                          style: TextStyle(
-                              color: cAmber, fontSize: 11.5, height: 1.6)),
-                    ),
-                  ]),
-                ),
-                if (err != null) ...[
-                  const SizedBox(height: 12),
-                  Text(err!,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(color: cAmber, fontSize: 12.5)),
-                ],
-                const SizedBox(height: 18),
-                SizedBox(
-                  width: double.infinity,
-                  height: 52,
-                  child: FilledButton(
-                    onPressed: busy
-                        ? null
-                        : () async {
-                            setS(() {
-                              busy = true;
-                              err = null;
-                            });
-                            try {
-                              await Supabase.instance.client.rpc('add_dish',
-                                  params: {
-                                    'p_place': _p.id,
-                                    'p_name': nameAr.text,
-                                    'p_name_en': nameEn.text,
-                                    'p_price': price.text.trim().isEmpty
-                                        ? null
-                                        : num.tryParse(price.text.trim()),
-                                  });
-                              if (sctx.mounted) Navigator.pop(sctx);
-                              _snack('أُضيف الطبق — شكراً لمساهمتك',
-                                  ok: true);
-                              _refresh();
-                            } catch (e) {
-                              setS(() {
-                                busy = false;
-                                err = _dishError('$e');
-                              });
-                            }
-                          },
-                    style: FilledButton.styleFrom(
-                        backgroundColor: cGreen,
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(15))),
-                    child: busy
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                                color: Colors.white, strokeWidth: 2))
-                        : const Text('إضافة الطبق',
-                            style: TextStyle(
-                                fontSize: 15.5,
-                                fontWeight: FontWeight.w700)),
+        builder: (sctx, setS) {
+          Future<void> pick(ImageSource src) async {
+            final u = Supabase.instance.client.auth.currentUser;
+            if (u == null) return;
+            try {
+              final x = await ImagePicker()
+                  .pickImage(source: src, maxWidth: 900, imageQuality: 82);
+              if (x == null) return;
+              final bytes = await x.readAsBytes();
+              if (bytes.lengthInBytes > 3 * 1024 * 1024) {
+                setS(() => err = 'الصورة أكبر من ٣ ميجابايت');
+                return;
+              }
+              setS(() {
+                preview = bytes;
+                uploading = true;
+                err = null;
+              });
+              // نفس المسار المسموح للمستخدم في سياسات التخزين
+              final path = 'submissions/${u.id}/dish_'
+                  '${DateTime.now().millisecondsSinceEpoch}.jpg';
+              await Supabase.instance.client.storage
+                  .from('places')
+                  .uploadBinary(path, bytes,
+                      fileOptions: const FileOptions(
+                          upsert: true, contentType: 'image/jpeg'));
+              final url = Supabase.instance.client.storage
+                  .from('places')
+                  .getPublicUrl(path);
+              setS(() {
+                imageUrl = url;
+                uploading = false;
+              });
+            } catch (e) {
+              setS(() {
+                uploading = false;
+                preview = null;
+                err = 'تعذّر رفع الصورة — حاول مرة أخرى';
+              });
+            }
+          }
+
+          void imageSheet() {
+            showModalBottomSheet<void>(
+              context: sctx,
+              backgroundColor: Colors.white,
+              shape: const RoundedRectangleBorder(
+                  borderRadius:
+                      BorderRadius.vertical(top: Radius.circular(22))),
+              builder: (ictx) => SafeArea(
+                child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  const SizedBox(height: 10),
+                  Container(
+                      width: 42,
+                      height: 4,
+                      decoration: BoxDecoration(
+                          color: cBorder,
+                          borderRadius: BorderRadius.circular(2))),
+                  const SizedBox(height: 14),
+                  ListTile(
+                    leading: const Icon(Icons.photo_library_outlined,
+                        color: cGreen),
+                    title: const Text('اختيار من الصور',
+                        style: TextStyle(fontSize: 14, color: cDark)),
+                    onTap: () {
+                      Navigator.pop(ictx);
+                      pick(ImageSource.gallery);
+                    },
                   ),
-                ),
-                const SizedBox(height: 6),
-                TextButton(
-                    onPressed: () => Navigator.pop(sctx),
-                    child: const Text('إلغاء',
-                        style: TextStyle(color: cGrey, fontSize: 13.5))),
-              ]),
+                  ListTile(
+                    leading: const Icon(Icons.photo_camera_outlined,
+                        color: cGreen),
+                    title: const Text('التقاط صورة',
+                        style: TextStyle(fontSize: 14, color: cDark)),
+                    onTap: () {
+                      Navigator.pop(ictx);
+                      pick(ImageSource.camera);
+                    },
+                  ),
+                  if (preview != null)
+                    ListTile(
+                      leading:
+                          const Icon(Icons.delete_outline, color: cAmber),
+                      title: const Text('حذف الصورة',
+                          style: TextStyle(fontSize: 14, color: cAmber)),
+                      onTap: () {
+                        Navigator.pop(ictx);
+                        setS(() {
+                          preview = null;
+                          imageUrl = null;
+                        });
+                      },
+                    ),
+                  const SizedBox(height: 8),
+                ]),
+              ),
+            );
+          }
+
+          return Padding(
+            padding:
+                EdgeInsets.only(bottom: MediaQuery.of(sctx).viewInsets.bottom),
+            child: SafeArea(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(22, 10, 22, 18),
+                child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  Container(
+                      width: 42,
+                      height: 4,
+                      decoration: BoxDecoration(
+                          color: cBorder,
+                          borderRadius: BorderRadius.circular(2))),
+                  const SizedBox(height: 18),
+                  const Text('أضف طبقاً',
+                      style: TextStyle(
+                          fontSize: 19,
+                          fontWeight: FontWeight.w700,
+                          color: cDark)),
+                  const SizedBox(height: 5),
+                  Text('إلى ${_p.nameAr}',
+                      style: const TextStyle(fontSize: 12.5, color: cGrey)),
+                  const SizedBox(height: 18),
+                  // ── صورة الطبق ──
+                  GestureDetector(
+                    onTap: imageSheet,
+                    child: Column(children: [
+                      Stack(alignment: Alignment.center, children: [
+                        Container(
+                          width: 104,
+                          height: 104,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: cBg,
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: cBorder, width: 1.5),
+                            image: preview == null
+                                ? null
+                                : DecorationImage(
+                                    image: MemoryImage(preview!),
+                                    fit: BoxFit.cover),
+                          ),
+                          child: preview == null
+                              ? const Icon(Icons.add_a_photo_outlined,
+                                  color: cGrey, size: 30)
+                              : null,
+                        ),
+                        if (uploading)
+                          Container(
+                            width: 104,
+                            height: 104,
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(20),
+                                color: Colors.black.withValues(alpha: 0.35)),
+                            child: const SizedBox(
+                                width: 22,
+                                height: 22,
+                                child: CircularProgressIndicator(
+                                    color: Colors.white, strokeWidth: 2.4)),
+                          ),
+                      ]),
+                      const SizedBox(height: 8),
+                      Text(
+                          preview == null
+                              ? 'أضف صورة الطبق (اختياري)'
+                              : uploading
+                                  ? 'جارِ الرفع…'
+                                  : 'اضغط لتغيير الصورة',
+                          style:
+                              const TextStyle(fontSize: 12, color: cGrey)),
+                    ]),
+                  ),
+                  const SizedBox(height: 18),
+                  _sheetField(nameAr, 'اسم الطبق',
+                      'مثال: برجر دجاج بخبز خالٍ من الجلوتين'),
+                  const SizedBox(height: 12),
+                  _sheetField(
+                      nameEn, 'الاسم بالإنجليزية (اختياري)', 'GF Chicken Burger'),
+                  const SizedBox(height: 12),
+                  _sheetField(price, 'السعر بالريال (اختياري)', '45',
+                      number: true),
+                  const SizedBox(height: 14),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                        color: cAmberBg,
+                        borderRadius: BorderRadius.circular(13)),
+                    child: const Row(children: [
+                      Icon(Icons.info_outline, size: 15, color: cAmber),
+                      SizedBox(width: 7),
+                      Expanded(
+                        child: Text(
+                            'يُضاف الطبق بحالة «تحقّق قبل الطلب»، ويتحدّد أمانه '
+                            'من تصويت المجتمع لا من ادّعاء المُضيف.',
+                            style: TextStyle(
+                                color: cAmber, fontSize: 11.5, height: 1.6)),
+                      ),
+                    ]),
+                  ),
+                  if (err != null) ...[
+                    const SizedBox(height: 12),
+                    Text(err!,
+                        textAlign: TextAlign.center,
+                        style:
+                            const TextStyle(color: cAmber, fontSize: 12.5)),
+                  ],
+                  const SizedBox(height: 18),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 52,
+                    child: FilledButton(
+                      onPressed: (busy || uploading)
+                          ? null
+                          : () async {
+                              setS(() {
+                                busy = true;
+                                err = null;
+                              });
+                              try {
+                                await Supabase.instance.client
+                                    .rpc('add_dish', params: {
+                                  'p_place': _p.id,
+                                  'p_name': nameAr.text,
+                                  'p_name_en': nameEn.text,
+                                  'p_price': price.text.trim().isEmpty
+                                      ? null
+                                      : num.tryParse(price.text.trim()),
+                                  'p_image_url': imageUrl,
+                                });
+                                if (sctx.mounted) Navigator.pop(sctx);
+                                _snack('أُضيف الطبق — شكراً لمساهمتك',
+                                    ok: true);
+                                _refresh();
+                              } catch (e) {
+                                setS(() {
+                                  busy = false;
+                                  err = _dishError('$e');
+                                });
+                              }
+                            },
+                      style: FilledButton.styleFrom(
+                          backgroundColor: cGreen,
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(15))),
+                      child: busy
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                  color: Colors.white, strokeWidth: 2))
+                          : Text(uploading ? 'انتظر رفع الصورة…' : 'إضافة الطبق',
+                              style: const TextStyle(
+                                  fontSize: 15.5,
+                                  fontWeight: FontWeight.w700)),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  TextButton(
+                      onPressed: () => Navigator.pop(sctx),
+                      child: const Text('إلغاء',
+                          style: TextStyle(color: cGrey, fontSize: 13.5))),
+                ]),
+              ),
             ),
-          ),
-        ),
+          );
+        },
       ),
     );
   }
@@ -699,12 +892,14 @@ class _DetailsScreenState extends State<DetailsScreen> {
         onTap: () => _openDish(d),
         child: Container(
           margin: const EdgeInsets.fromLTRB(20, 0, 20, 10),
-          padding: const EdgeInsets.all(14),
+          padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(18),
               border: Border.all(color: cBorder)),
           child: Row(children: [
+            DishThumb(d, size: 62),
+            const SizedBox(width: 11),
             Expanded(
               child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -722,7 +917,7 @@ class _DetailsScreenState extends State<DetailsScreen> {
                           overflow: TextOverflow.ellipsis,
                           style:
                               const TextStyle(fontSize: 11, color: cGrey)),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 7),
                     Row(children: [
                       Container(
                         padding: const EdgeInsets.symmetric(
@@ -740,13 +935,13 @@ class _DetailsScreenState extends State<DetailsScreen> {
                                   fontWeight: FontWeight.w700)),
                         ]),
                       ),
-                      const SizedBox(width: 10),
+                      const SizedBox(width: 8),
                       Text('${d.price?.toStringAsFixed(0) ?? '—'} ريال',
                           style: const TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.w700,
                               color: cGreen)),
-                      const SizedBox(width: 8),
+                      const SizedBox(width: 6),
                       Flexible(
                         child: Text('· ${d.votes} تجربة',
                             maxLines: 1,
@@ -757,7 +952,7 @@ class _DetailsScreenState extends State<DetailsScreen> {
                     ]),
                   ]),
             ),
-            const SizedBox(width: 6),
+            const SizedBox(width: 4),
             const Icon(Icons.arrow_forward_ios, size: 14, color: cGrey),
           ]),
         ),
@@ -772,7 +967,7 @@ class _DetailsScreenState extends State<DetailsScreen> {
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       builder: (sctx) => SafeArea(
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(22, 10, 22, 18),
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             Container(
@@ -780,7 +975,24 @@ class _DetailsScreenState extends State<DetailsScreen> {
                 height: 4,
                 decoration: BoxDecoration(
                     color: cBorder, borderRadius: BorderRadius.circular(2))),
-            const SizedBox(height: 18),
+            const SizedBox(height: 16),
+            if (d.hasImage)
+              ClipRRect(
+                borderRadius: BorderRadius.circular(18),
+                child: Image.network(d.imageUrl!,
+                    width: double.infinity,
+                    height: 180,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => Container(
+                        height: 180,
+                        alignment: Alignment.center,
+                        color: cBg,
+                        child: const Icon(Icons.restaurant_menu,
+                            color: cGrey, size: 40))),
+              )
+            else
+              DishThumb(d, size: 96, radius: 20),
+            const SizedBox(height: 14),
             Text(d.nameAr,
                 textAlign: TextAlign.center,
                 style: const TextStyle(
