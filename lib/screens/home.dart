@@ -69,21 +69,11 @@ class _HomeScreenState extends State<HomeScreen> {
           _bar(ctx),
           const SizedBox(height: 16),
           const PromoBanner(),
-          const SizedBox(height: 16),
-          _pad(Row(children: [
-            _stat('${ps.length}', 'مطعم'),
-            const SizedBox(width: 10),
-            _stat('$nd', 'طبق'),
-            const SizedBox(width: 10),
-            _stat('$nv', 'تجربة')
-          ])),
-          const SizedBox(height: 16),
-          _pad(_note(cSafeBg, cGreen, Icons.check,
-              'منطقة تحضير منفصلة — آمنة للسيلياك')),
-          const SizedBox(height: 6),
-          _pad(_note(cAmberBg, cAmber, Icons.warning_amber_rounded,
-              'مشتركة / غير معروفة — تحقّق قبل الطلب')),
-          const SizedBox(height: 16),
+          const SizedBox(height: 18),
+          _pad(_stats('${ps.length}', '$nd', '$nv')),
+          const SizedBox(height: 12),
+          _pad(_legend()),
+          const SizedBox(height: 18),
           _chips(),
           const SizedBox(height: 20),
           _pad(const Row(children: [
@@ -160,35 +150,87 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       );
 
-  Widget _stat(String n, String l) => Expanded(
-        child: Container(
-          height: 52,
-          decoration: BoxDecoration(
-              color: cSafeBg, borderRadius: BorderRadius.circular(14)),
-          child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-            Text(n,
-                style: const TextStyle(
-                    color: cGreen, fontSize: 15, fontWeight: FontWeight.w700)),
-            Text(l, style: const TextStyle(color: cGreen, fontSize: 11)),
-          ]),
-        ),
+  /// الإحصاءات — بطاقة بيضاء واحدة بأيقونات ثنائية الطبقة.
+  /// الأخضر محجوز لشارات الأمان، فلا نستخدمه هنا زينةً.
+  Widget _stats(String places, String dishes, String votes) => Container(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: cBorder)),
+        child: Row(children: [
+          _statCell(const _DomeIcon(), places, 'مطعم', cGreen, cSafeBg),
+          _statDivider(),
+          _statCell(const _BowlIcon(), dishes, 'طبق', const Color(0xFF5CA733),
+              const Color(0xFFEDF6E6)),
+          _statDivider(),
+          _statCell(const _BubbleIcon(), votes, 'تجربة', cAmber, cAmberBg),
+        ]),
       );
 
-  Widget _note(Color bg, Color fg, IconData ic, String t) => Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-        decoration:
-            BoxDecoration(color: bg, borderRadius: BorderRadius.circular(10)),
-        child: Row(children: [
-          Icon(ic, color: fg, size: 14),
-          const SizedBox(width: 6),
-          Expanded(
-            child: Text(t,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(color: fg, fontSize: 12)),
+  Widget _statDivider() =>
+      Container(width: 1, height: 54, color: cBorder);
+
+  Widget _statCell(
+          Widget icon, String n, String label, Color fg, Color bg) =>
+      Expanded(
+        child: Column(children: [
+          Container(
+            width: 40,
+            height: 40,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+                color: bg, borderRadius: BorderRadius.circular(13)),
+            child: icon,
           ),
+          const SizedBox(height: 9),
+          Text(n,
+              style: const TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w700,
+                  color: cDark,
+                  height: 1.1)),
+          const SizedBox(height: 3),
+          Text(label,
+              style: const TextStyle(fontSize: 11, color: cGrey)),
         ]),
+      );
+
+  /// دليل الألوان — سطر واحد مضغوط بدل شريطين يشرحان نفس المعنى مرتين
+  Widget _legend() => Container(
+        height: 46,
+        padding: const EdgeInsets.symmetric(horizontal: 14),
+        decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: cBorder)),
+        child: Row(children: [
+          _legendItem(cGreen, 'آمنة'),
+          Container(
+              width: 1,
+              height: 20,
+              margin: const EdgeInsets.symmetric(horizontal: 14),
+              color: cBorder),
+          _legendItem(cAmber, 'تحقّق'),
+          const Spacer(),
+          const Text('دليل الألوان',
+              style: TextStyle(fontSize: 11, color: cGrey)),
+        ]),
+      );
+
+  Widget _legendItem(Color c, String t) => Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 9,
+            height: 9,
+            decoration: BoxDecoration(color: c, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 6),
+          Text(t,
+              style: TextStyle(
+                  fontSize: 12, color: c, fontWeight: FontWeight.w600)),
+        ],
       );
 
   Widget _chips() {
@@ -266,4 +308,140 @@ class _HomeScreenState extends State<HomeScreen> {
           ]),
         ),
       );
+}
+
+// ═══════════ الأيقونات ═══════════
+// مرسومة بالمسارات بأسلوب ثنائي الطبقة: شكل ممتلئ خافت وخط حاد فوقه.
+// لا صور ولا مكتبة خارجية — فلا تزيد حجم التطبيق ولا تتشوّه عند التكبير.
+
+class _DomeIcon extends StatelessWidget {
+  const _DomeIcon();
+  @override
+  Widget build(BuildContext c) =>
+      const SizedBox(width: 24, height: 24, child: CustomPaint(painter: _Dome()));
+}
+
+class _Dome extends CustomPainter {
+  const _Dome();
+  @override
+  void paint(Canvas c, Size s) {
+    final u = s.width / 24;
+    final line = Paint()
+      ..color = cGreen
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.9 * u
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..isAntiAlias = true;
+    final fill = Paint()
+      ..color = cGreen.withValues(alpha: 0.16)
+      ..isAntiAlias = true;
+
+    final dome = Path()
+      ..moveTo(3.6 * u, 17 * u)
+      ..arcToPoint(Offset(20.4 * u, 17 * u),
+          radius: Radius.circular(8.4 * u), clockwise: true)
+      ..close();
+    c.drawPath(dome, fill);
+    c.drawPath(dome, line);
+    c.drawLine(Offset(2 * u, 17 * u), Offset(22 * u, 17 * u), line);
+    c.drawLine(Offset(12 * u, 8.6 * u), Offset(12 * u, 6.6 * u), line);
+    c.drawCircle(Offset(12 * u, 5.2 * u),
+        1.5 * u, Paint()..color = cGreen..isAntiAlias = true);
+  }
+
+  @override
+  bool shouldRepaint(covariant _Dome old) => false;
+}
+
+class _BowlIcon extends StatelessWidget {
+  const _BowlIcon();
+  @override
+  Widget build(BuildContext c) =>
+      const SizedBox(width: 24, height: 24, child: CustomPaint(painter: _Bowl()));
+}
+
+class _Bowl extends CustomPainter {
+  const _Bowl();
+  static const _leaf = Color(0xFF5CA733);
+  @override
+  void paint(Canvas c, Size s) {
+    final u = s.width / 24;
+    final line = Paint()
+      ..color = _leaf
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.9 * u
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..isAntiAlias = true;
+    final fill = Paint()
+      ..color = _leaf.withValues(alpha: 0.18)
+      ..isAntiAlias = true;
+
+    final bowl = Path()
+      ..moveTo(3 * u, 12.4 * u)
+      ..lineTo(21 * u, 12.4 * u)
+      ..arcToPoint(Offset(3 * u, 12.4 * u),
+          radius: Radius.circular(9 * u), clockwise: true)
+      ..close();
+    c.drawPath(bowl, fill);
+    c.drawPath(bowl, line);
+    c.drawLine(Offset(2 * u, 21.4 * u), Offset(22 * u, 21.4 * u), line);
+    // بخار
+    final steam1 = Path()
+      ..moveTo(9.4 * u, 8 * u)
+      ..cubicTo(9.4 * u, 6.6 * u, 10.7 * u, 6.6 * u, 10.7 * u, 5 * u);
+    final steam2 = Path()
+      ..moveTo(13.6 * u, 8 * u)
+      ..cubicTo(13.6 * u, 6.6 * u, 14.9 * u, 6.6 * u, 14.9 * u, 5 * u);
+    c.drawPath(steam1, line);
+    c.drawPath(steam2, line);
+  }
+
+  @override
+  bool shouldRepaint(covariant _Bowl old) => false;
+}
+
+class _BubbleIcon extends StatelessWidget {
+  const _BubbleIcon();
+  @override
+  Widget build(BuildContext c) => const SizedBox(
+      width: 24, height: 24, child: CustomPaint(painter: _Bubble()));
+}
+
+class _Bubble extends CustomPainter {
+  const _Bubble();
+  @override
+  void paint(Canvas c, Size s) {
+    final u = s.width / 24;
+    final line = Paint()
+      ..color = cAmber
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.9 * u
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..isAntiAlias = true;
+    final fill = Paint()
+      ..color = cAmber.withValues(alpha: 0.16)
+      ..isAntiAlias = true;
+
+    final r = Radius.circular(3.2 * u);
+    final bubble = Path()
+      ..addRRect(RRect.fromLTRBR(3 * u, 4 * u, 21 * u, 16.6 * u, r))
+      ..moveTo(7.4 * u, 16.6 * u)
+      ..lineTo(7.4 * u, 20.8 * u)
+      ..lineTo(11.8 * u, 16.6 * u)
+      ..close();
+    c.drawPath(bubble, fill);
+    c.drawPath(bubble, line);
+    // علامة صح
+    final tick = Path()
+      ..moveTo(8.6 * u, 10.4 * u)
+      ..lineTo(11 * u, 12.8 * u)
+      ..lineTo(15.6 * u, 8.2 * u);
+    c.drawPath(tick, line);
+  }
+
+  @override
+  bool shouldRepaint(covariant _Bubble old) => false;
 }
