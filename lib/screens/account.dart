@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../core.dart';
@@ -120,6 +121,68 @@ class _AccountScreenState extends State<AccountScreen> {
       setState(() => _msg = '$e');
     } finally {
       if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// إعادة تعيين كلمة المرور — يرسل Supabase رابطاً للبريد
+  Future<void> _forgot() async {
+    final ctl = TextEditingController(text: _email.text.trim());
+    final go = await showDialog<bool>(
+      context: context,
+      builder: (dctx) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        title: const Text('استعادة كلمة المرور',
+            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          const Text(
+              'اكتب بريدك المسجّل، وسيصلك رابط لتعيين كلمة مرور جديدة.',
+              textAlign: TextAlign.start,
+              style: TextStyle(fontSize: 12.5, color: cGrey, height: 1.7)),
+          const SizedBox(height: 14),
+          TextField(
+            controller: ctl,
+            autofocus: true,
+            keyboardType: TextInputType.emailAddress,
+            textAlign: TextAlign.start,
+            decoration: InputDecoration(
+              hintText: 'example@email.com',
+              hintStyle: const TextStyle(color: cGrey, fontSize: 13),
+              enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: cBorder)),
+              focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: cGreen)),
+            ),
+          ),
+        ]),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(dctx, false),
+              child: const Text('إلغاء', style: TextStyle(color: cGrey))),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: cGreen),
+            onPressed: () => Navigator.pop(dctx, true),
+            child: const Text('إرسال'),
+          ),
+        ],
+      ),
+    );
+    if (go != true) return;
+    final mail = ctl.text.trim();
+    if (mail.isEmpty || !mail.contains('@')) {
+      _toast('اكتب بريداً صحيحاً');
+      return;
+    }
+    try {
+      await Supabase.instance.client.auth.resetPasswordForEmail(mail);
+      // لا نكشف إن كان البريد مسجّلاً أم لا — حماية لخصوصية المستخدمين
+      _toast('إن كان البريد مسجّلاً فسيصلك رابط الاستعادة', ok: true);
+    } on AuthException catch (e) {
+      _toast(e.message);
+    } catch (_) {
+      _toast('تعذّر الإرسال — حاول بعد قليل');
     }
   }
 
@@ -371,6 +434,213 @@ class _AccountScreenState extends State<AccountScreen> {
       ),
     );
   }
+
+  /// ورقة اختيار المدينة — بحث وموقع تلقائي، ولا تنمو مهما كثرت المدن
+  void _citySheet() {
+    final search = TextEditingController();
+    String picked = (_me?['city'] as String?) ?? '';
+    bool locating = false;
+
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.white,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (sctx) => StatefulBuilder(
+        builder: (sctx, setS) {
+          final q = search.text.trim();
+          final list = q.isEmpty
+              ? Cities.all
+              : Cities.all.where((c) => c.contains(q)).toList();
+
+          Future<void> useLocation() async {
+            setS(() => locating = true);
+            try {
+              if (!await Geolocator.isLocationServiceEnabled()) {
+                _toast('خدمة الموقع مغلقة في جهازك');
+                return;
+              }
+              var perm = await Geolocator.checkPermission();
+              if (perm == LocationPermission.denied) {
+                perm = await Geolocator.requestPermission();
+              }
+              if (perm == LocationPermission.denied ||
+                  perm == LocationPermission.deniedForever) {
+                _toast('أذن بالوصول للموقع من إعدادات الجهاز');
+                return;
+              }
+              final p = await Geolocator.getCurrentPosition(
+                locationSettings:
+                    const LocationSettings(accuracy: LocationAccuracy.low),
+              ).timeout(const Duration(seconds: 12));
+              // نختار أقرب مدينة من قائمتك بإحداثياتها التقريبية
+              final near = Cities.nearest(p.latitude, p.longitude);
+              if (near == null) {
+                _toast('لم نتعرّف على مدينتك — اخترها يدوياً');
+                return;
+              }
+              setS(() => picked = near);
+            } catch (_) {
+              _toast('تعذّر تحديد موقعك');
+            } finally {
+              if (sctx.mounted) setS(() => locating = false);
+            }
+          }
+
+          return Padding(
+            padding:
+                EdgeInsets.only(bottom: MediaQuery.of(sctx).viewInsets.bottom),
+            child: SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(22, 10, 22, 18),
+                child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  Container(
+                      width: 42,
+                      height: 4,
+                      decoration: BoxDecoration(
+                          color: cBorder,
+                          borderRadius: BorderRadius.circular(2))),
+                  const SizedBox(height: 18),
+                  const Text('اختر مدينتك',
+                      style: TextStyle(
+                          fontSize: 19,
+                          fontWeight: FontWeight.w700,
+                          color: cDark)),
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    decoration: BoxDecoration(
+                        color: cBg,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: cBorder)),
+                    child: Row(children: [
+                      const Icon(Icons.search, size: 19, color: cGrey),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextField(
+                          controller: search,
+                          onChanged: (_) => setS(() {}),
+                          textAlign: TextAlign.start,
+                          decoration: const InputDecoration(
+                              border: InputBorder.none,
+                              isDense: true,
+                              contentPadding:
+                                  EdgeInsets.symmetric(vertical: 14),
+                              hintText: 'ابحث عن مدينة',
+                              hintStyle:
+                                  TextStyle(color: cGrey, fontSize: 13)),
+                          style:
+                              const TextStyle(fontSize: 14.5, color: cDark),
+                        ),
+                      ),
+                    ]),
+                  ),
+                  const SizedBox(height: 10),
+                  InkWell(
+                    onTap: locating ? null : useLocation,
+                    borderRadius: BorderRadius.circular(14),
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 13),
+                      decoration: BoxDecoration(
+                          color: cSafeBg,
+                          borderRadius: BorderRadius.circular(14)),
+                      child: Row(children: [
+                        if (locating)
+                          const SizedBox(
+                              width: 17,
+                              height: 17,
+                              child: CircularProgressIndicator(
+                                  color: cGreen, strokeWidth: 2.2))
+                        else
+                          const Icon(Icons.my_location,
+                              size: 18, color: cGreen),
+                        const SizedBox(width: 9),
+                        Text(
+                            locating
+                                ? 'جارِ تحديد موقعك…'
+                                : 'استخدم موقعي الحالي',
+                            style: const TextStyle(
+                                color: cGreen,
+                                fontSize: 13.5,
+                                fontWeight: FontWeight.w700)),
+                      ]),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  ConstrainedBox(
+                    constraints: BoxConstraints(
+                        maxHeight: MediaQuery.of(sctx).size.height * 0.38),
+                    child: list.isEmpty
+                        ? const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 30),
+                            child: Text('لا توجد مدينة بهذا الاسم',
+                                style:
+                                    TextStyle(color: cGrey, fontSize: 13)),
+                          )
+                        : ListView.separated(
+                            shrinkWrap: true,
+                            itemCount: list.length,
+                            separatorBuilder: (_, __) => const Divider(
+                                height: 1, color: cBorder),
+                            itemBuilder: (_, i) {
+                              final c = list[i];
+                              final on = c == picked;
+                              return InkWell(
+                                onTap: () => setS(() => picked = c),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                      vertical: 14),
+                                  child: Row(children: [
+                                    Expanded(
+                                      child: Text(c,
+                                          style: TextStyle(
+                                              fontSize: 14.5,
+                                              fontWeight: on
+                                                  ? FontWeight.w700
+                                                  : FontWeight.w500,
+                                              color: on ? cGreen : cDark)),
+                                    ),
+                                    if (on)
+                                      const Icon(Icons.check,
+                                          size: 18, color: cGreen),
+                                  ]),
+                                ),
+                              );
+                            },
+                          ),
+                  ),
+                  const SizedBox(height: 14),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 50,
+                    child: FilledButton(
+                      onPressed: picked.isEmpty
+                          ? null
+                          : () {
+                              Navigator.pop(sctx);
+                              _setField('city', picked);
+                            },
+                      style: FilledButton.styleFrom(
+                          backgroundColor: cGreen,
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14))),
+                      child: const Text('حفظ',
+                          style: TextStyle(
+                              fontSize: 15, fontWeight: FontWeight.w700)),
+                    ),
+                  ),
+                ]),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext ctx) => _me == null ? _form() : _profile(ctx);
 
@@ -470,8 +740,11 @@ class _AccountScreenState extends State<AccountScreen> {
               _sep(),
               _tile(Icons.mail_outline, 'البريد الإلكتروني',
                   _me!['email'] as String, _changeEmail),
-              _sep(),
-              _pushRow(),
+              // صف الإشعارات يظهر فقط حين يفشل التسجيل — وإلا فهو ضجيج
+              if (!Push.saved) ...[
+                _sep(),
+                _pushRow(),
+              ],
               _sep(),
               _genderRow(),
               _sep(),
@@ -578,57 +851,51 @@ class _AccountScreenState extends State<AccountScreen> {
         ),
       );
 
-  Widget _pushRow() {
-    final ok = Push.saved;
-    return InkWell(
-      onTap: _pushBusy ? null : _pushTap,
-      onLongPress: _showDiag,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-        child: Row(children: [
-          Icon(ok ? Icons.notifications_active : Icons.notifications_off,
-              size: 19, color: ok ? cGreen : cGrey),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('الإشعارات',
-                      style: TextStyle(fontSize: 11, color: cGrey)),
-                  const SizedBox(height: 2),
-                  Text(
-                      ok
-                          ? 'مفعّلة — جهازك مسجّل'
-                          : _pushBusy
-                              ? 'جارِ التسجيل…'
-                              : 'غير مكتملة — اضغط للمحاولة',
-                      style: TextStyle(
-                          fontSize: 13.5,
-                          color: ok ? cGreen : cDark,
-                          fontWeight: FontWeight.w600)),
-                  if (!ok && !_pushBusy) ...[
+  /// لا يظهر إلا عند فشل التسجيل — الإشعارات إجبارية وتُدار من إعدادات الجهاز
+  Widget _pushRow() => InkWell(
+        onTap: _pushBusy ? null : _pushTap,
+        onLongPress: _showDiag,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+          child: Row(children: [
+            const Icon(Icons.notifications_off, size: 19, color: cAmber),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('الإشعارات',
+                        style: TextStyle(fontSize: 11, color: cGrey)),
                     const SizedBox(height: 2),
-                    Text(Push.step,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 10.5, color: cAmber)),
-                  ],
-                ]),
-          ),
-          if (_pushBusy)
-            const SizedBox(
-                width: 18,
-                height: 18,
-                child:
-                    CircularProgressIndicator(color: cGreen, strokeWidth: 2))
-          else if (ok)
-            const Icon(Icons.check_circle, size: 18, color: cGreen)
-          else
-            const Icon(Icons.refresh, size: 18, color: cGrey),
-        ]),
-      ),
-    );
-  }
+                    Text(
+                        _pushBusy
+                            ? 'جارِ التسجيل…'
+                            : 'غير مكتملة — اضغط للمحاولة',
+                        style: const TextStyle(
+                            fontSize: 13.5,
+                            color: cDark,
+                            fontWeight: FontWeight.w600)),
+                    if (!_pushBusy) ...[
+                      const SizedBox(height: 2),
+                      Text(Push.step,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style:
+                              const TextStyle(fontSize: 10.5, color: cAmber)),
+                    ],
+                  ]),
+            ),
+            if (_pushBusy)
+              const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child:
+                      CircularProgressIndicator(color: cGreen, strokeWidth: 2))
+            else
+              const Icon(Icons.refresh, size: 18, color: cGrey),
+          ]),
+        ),
+      );
 
   Widget _genderRow() {
     final g = _me?['gender'] as String?;
@@ -678,41 +945,39 @@ class _AccountScreenState extends State<AccountScreen> {
     );
   }
 
+  /// صف واحد ثابت الارتفاع — لا ينمو مهما بلغ عدد المدن
   Widget _cityRow() {
     final city = (_me?['city'] as String?) ?? '';
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
-      child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Row(children: [
-              Icon(Icons.location_city_outlined, size: 19, color: cGrey),
-              SizedBox(width: 10),
-              Text('مدينتي', style: TextStyle(fontSize: 11, color: cGrey)),
-            ]),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: Cities.all.map((c) {
-                final on = c == city;
-                return GestureDetector(
-                  onTap: () => _setField('city', c),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 7),
-                    decoration: BoxDecoration(
-                        color: on ? cGreen : Colors.white,
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: on ? cGreen : cBorder)),
-                    child: Text(c,
-                        style: TextStyle(
-                            color: on ? Colors.white : cDark, fontSize: 12.5)),
-                  ),
-                );
-              }).toList(),
-            ),
-          ]),
+    return InkWell(
+      onTap: _citySheet,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+        child: Row(children: [
+          const Icon(Icons.location_city_outlined, size: 19, color: cGrey),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('مدينتي',
+                      style: TextStyle(fontSize: 11, color: cGrey)),
+                  const SizedBox(height: 2),
+                  Text(city.isEmpty ? 'لم تُحدَّد' : city,
+                      style: TextStyle(
+                          fontSize: 13.5,
+                          color: city.isEmpty ? cGrey : cDark,
+                          fontWeight: FontWeight.w600)),
+                ]),
+          ),
+          const Text('تغيير',
+              style: TextStyle(
+                  fontSize: 12.5,
+                  color: cGreen,
+                  fontWeight: FontWeight.w700)),
+          const SizedBox(width: 6),
+          const Icon(Icons.arrow_forward_ios, size: 13, color: cGrey),
+        ]),
+      ),
     );
   }
 
@@ -729,6 +994,53 @@ class _AccountScreenState extends State<AccountScreen> {
           ]),
         ),
       );
+
+  // ــــــــ شاشة الدخول ــــــــ
+
+  /// زر مزوّد خارجي — معطّل حتى تُضبط مفاتيحه في Supabase
+  Widget _providerBtn(String label, IconData ic, Color fg, Color bg,
+      {Color? border}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Opacity(
+        opacity: 0.45,
+        child: InkWell(
+          onTap: () => _toast('سيُفعَّل قريباً'),
+          borderRadius: BorderRadius.circular(14),
+          child: Container(
+            height: 52,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+                color: bg,
+                borderRadius: BorderRadius.circular(14),
+                border: border == null ? null : Border.all(color: border)),
+            child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+              Icon(ic, size: 19, color: fg),
+              const SizedBox(width: 9),
+              Text(label,
+                  style: TextStyle(
+                      color: fg,
+                      fontSize: 14.5,
+                      fontWeight: FontWeight.w700)),
+              const SizedBox(width: 8),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                decoration: BoxDecoration(
+                    color: fg.withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(8)),
+                child: Text('قريباً',
+                    style: TextStyle(
+                        color: fg,
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w700)),
+              ),
+            ]),
+          ),
+        ),
+      ),
+    );
+  }
 
   Widget _form() => ListView(
         padding: const EdgeInsets.all(20),
@@ -747,7 +1059,25 @@ class _AccountScreenState extends State<AccountScreen> {
                   : 'سجّل دخولك لمتابعة مساهماتك في المجتمع',
               textAlign: TextAlign.center,
               style: const TextStyle(fontSize: 13, color: cGrey)),
-          const SizedBox(height: 24),
+          const SizedBox(height: 22),
+
+          // ── المزوّدون ──
+          _providerBtn('المتابعة عبر Apple', Icons.apple, Colors.white, cDark),
+          _providerBtn('المتابعة عبر Google', Icons.g_mobiledata, cDark,
+              Colors.white,
+              border: cBorder),
+          const SizedBox(height: 6),
+          Row(children: [
+            const Expanded(child: Divider(color: cBorder)),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Text('أو بالبريد الإلكتروني',
+                  style: const TextStyle(fontSize: 11.5, color: cGrey)),
+            ),
+            const Expanded(child: Divider(color: cBorder)),
+          ]),
+          const SizedBox(height: 18),
+
           if (_signup) ...[
             _field(_name, 'الاسم الكامل', 'اكتب اسمك'),
             const SizedBox(height: 14),
@@ -755,6 +1085,24 @@ class _AccountScreenState extends State<AccountScreen> {
           _field(_email, 'البريد الإلكتروني', 'example@email.com'),
           const SizedBox(height: 14),
           _field(_pass, 'كلمة المرور', '٦ أحرف على الأقل', hide: true),
+          if (!_signup) ...[
+            const SizedBox(height: 8),
+            Align(
+              alignment: AlignmentDirectional.centerEnd,
+              child: GestureDetector(
+                onTap: _forgot,
+                behavior: HitTestBehavior.opaque,
+                child: const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 4),
+                  child: Text('نسيت كلمة المرور؟',
+                      style: TextStyle(
+                          color: cGreen,
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w700)),
+                ),
+              ),
+            ),
+          ],
           if (_signup) ...[
             const SizedBox(height: 14),
             const Row(children: [
