@@ -17,13 +17,29 @@ class MapScreen extends StatefulWidget {
 class _MapScreenState extends State<MapScreen> {
   final _mc = MapController();
   late Future<List<_Pin>> _f;
+
+  // ── الفلاتر ──
+  // النوع ظاهر دائماً، والمدينة والأمان داخل ورقة التصفية
+  String _type = 'all'; // all | restaurant | cafe | bakery
   String _city = 'الكل';
+  bool _safeOnly = false;
+
   _Pin? _sel;
   LatLng? _me;
   bool _locating = false;
   bool _mapReady = false;
 
   static const _riyadh = LatLng(24.7136, 46.6753);
+
+  static const _types = [
+    ['all', 'الكل'],
+    ['restaurant', 'مطاعم'],
+    ['cafe', 'مقاهي'],
+    ['bakery', 'مخابز'],
+  ];
+
+  int get _activeFilters =>
+      (_city == 'الكل' ? 0 : 1) + (_safeOnly ? 1 : 0);
 
   @override
   void initState() {
@@ -36,10 +52,12 @@ class _MapScreenState extends State<MapScreen> {
   Future<List<_Pin>> _load() async {
     var q = Supabase.instance.client
         .from('places')
-        .select('${Place.cols},lat,lng,address')
+        .select('${Place.cols},lat,lng,address,place_type')
         .eq('status', 'published')
         .not('lat', 'is', null);
+    if (_type != 'all') q = q.eq('place_type', _type);
     if (_city != 'الكل') q = q.eq('city', _city);
+    if (_safeOnly) q = q.eq('effective_safety_status', 'SEPARATE_PREP');
     final r = await q;
     return (r as List)
         .map((e) => e as Map<String, dynamic>)
@@ -52,9 +70,8 @@ class _MapScreenState extends State<MapScreen> {
         .toList();
   }
 
-  void _pick(String c) {
+  void _apply() {
     setState(() {
-      _city = c;
       _sel = null;
       _f = _load();
     });
@@ -152,6 +169,162 @@ class _MapScreenState extends State<MapScreen> {
     ));
   }
 
+  // ─────────── ورقة التصفية ───────────
+
+  void _filterSheet() {
+    String city = _city;
+    bool safe = _safeOnly;
+
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.white,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (sctx) => StatefulBuilder(
+        builder: (sctx, setS) => SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(22, 10, 22, 18),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              Container(
+                  width: 42,
+                  height: 4,
+                  decoration: BoxDecoration(
+                      color: cBorder,
+                      borderRadius: BorderRadius.circular(2))),
+              const SizedBox(height: 18),
+              Row(children: [
+                const Expanded(
+                  child: Text('تصفية',
+                      style: TextStyle(
+                          fontSize: 19,
+                          fontWeight: FontWeight.w700,
+                          color: cDark)),
+                ),
+                GestureDetector(
+                  onTap: () => setS(() {
+                    city = 'الكل';
+                    safe = false;
+                  }),
+                  behavior: HitTestBehavior.opaque,
+                  child: const Text('إعادة تعيين',
+                      style: TextStyle(fontSize: 12.5, color: cGrey)),
+                ),
+              ]),
+              const SizedBox(height: 20),
+
+              // ── الأمان ──
+              const Row(children: [
+                Text('الأمان',
+                    style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: cDark)),
+              ]),
+              const SizedBox(height: 10),
+              GestureDetector(
+                onTap: () => setS(() => safe = !safe),
+                behavior: HitTestBehavior.opaque,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 14, vertical: 14),
+                  decoration: BoxDecoration(
+                      color: safe ? cSafeBg : Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                          color: safe ? cGreen : cBorder,
+                          width: safe ? 1.6 : 1)),
+                  child: Row(children: [
+                    Icon(safe ? Icons.check_circle : Icons.circle_outlined,
+                        color: safe ? cGreen : cGrey, size: 21),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('الآمنة للسيلياك فقط',
+                                style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w700,
+                                    color: safe ? cGreen : cDark)),
+                            const SizedBox(height: 2),
+                            const Text('أماكن بمنطقة تحضير منفصلة',
+                                style:
+                                    TextStyle(fontSize: 11.5, color: cGrey)),
+                          ]),
+                    ),
+                  ]),
+                ),
+              ),
+              const SizedBox(height: 22),
+
+              // ── المدينة ──
+              const Row(children: [
+                Text('المدينة',
+                    style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: cDark)),
+              ]),
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: ['الكل', ...Cities.all].map((c) {
+                  final on = c == city;
+                  return GestureDetector(
+                    onTap: () => setS(() => city = c),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 9),
+                      decoration: BoxDecoration(
+                          color: on ? cGreen : Colors.white,
+                          borderRadius: BorderRadius.circular(16),
+                          border:
+                              Border.all(color: on ? cGreen : cBorder)),
+                      child: Text(c,
+                          style: TextStyle(
+                              color: on ? Colors.white : cDark,
+                              fontSize: 13,
+                              fontWeight: on
+                                  ? FontWeight.w700
+                                  : FontWeight.w500)),
+                    ),
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 26),
+              SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: FilledButton(
+                  onPressed: () {
+                    Navigator.pop(sctx);
+                    _city = city;
+                    _safeOnly = safe;
+                    _apply();
+                  },
+                  style: FilledButton.styleFrom(
+                      backgroundColor: cGreen,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(15))),
+                  child: const Text('عرض النتائج',
+                      style: TextStyle(
+                          fontSize: 15.5, fontWeight: FontWeight.w700)),
+                ),
+              ),
+              const SizedBox(height: 6),
+              TextButton(
+                  onPressed: () => Navigator.pop(sctx),
+                  child: const Text('إلغاء',
+                      style: TextStyle(color: cGrey, fontSize: 13.5))),
+            ]),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext ctx) {
     return FutureBuilder<List<_Pin>>(
@@ -182,11 +355,7 @@ class _MapScreenState extends State<MapScreen> {
               if (_me != null)
                 MarkerLayer(markers: [
                   Marker(
-                    point: _me!,
-                    width: 26,
-                    height: 26,
-                    child: _meDot(),
-                  ),
+                      point: _me!, width: 26, height: 26, child: _meDot()),
                 ]),
               MarkerLayer(
                 markers: pins
@@ -204,50 +373,67 @@ class _MapScreenState extends State<MapScreen> {
               ),
             ],
           ),
+
+          // ── شريط الفلاتر: النوع + زر تصفية ──
           Positioned(
             top: 10,
             right: 0,
             left: 0,
             child: SizedBox(
-              height: 38,
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                itemCount: 1 + Cities.all.length,
-                separatorBuilder: (_, __) => const SizedBox(width: 8),
-                itemBuilder: (_, i) {
-                  final c = i == 0 ? 'الكل' : Cities.all[i - 1];
-                  final on = c == _city;
-                  return GestureDetector(
-                    onTap: () => _pick(c),
-                    child: Container(
-                      alignment: Alignment.center,
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      decoration: BoxDecoration(
-                        color: on ? cGreen : Colors.white,
-                        borderRadius: BorderRadius.circular(19),
-                        border: Border.all(color: on ? cGreen : cBorder),
-                        boxShadow: [
-                          BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.08),
-                              blurRadius: 6,
-                              offset: const Offset(0, 2))
-                        ],
-                      ),
-                      child: Text(c,
-                          style: TextStyle(
-                              color: on ? Colors.white : cDark,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600)),
-                    ),
-                  );
-                },
-              ),
+              height: 40,
+              child: Row(children: [
+                const SizedBox(width: 12),
+                _filterButton(),
+                Expanded(
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    itemCount: _types.length,
+                    separatorBuilder: (_, __) => const SizedBox(width: 8),
+                    itemBuilder: (_, i) {
+                      final t = _types[i];
+                      final on = t[0] == _type;
+                      return GestureDetector(
+                        onTap: () {
+                          _type = t[0];
+                          _apply();
+                        },
+                        child: Container(
+                          alignment: Alignment.center,
+                          padding:
+                              const EdgeInsets.symmetric(horizontal: 17),
+                          decoration: BoxDecoration(
+                            color: on ? cGreen : Colors.white,
+                            borderRadius: BorderRadius.circular(20),
+                            border:
+                                Border.all(color: on ? cGreen : cBorder),
+                            boxShadow: [
+                              BoxShadow(
+                                  color:
+                                      Colors.black.withValues(alpha: 0.08),
+                                  blurRadius: 6,
+                                  offset: const Offset(0, 2))
+                            ],
+                          ),
+                          child: Text(t[1],
+                              style: TextStyle(
+                                  color: on ? Colors.white : cDark,
+                                  fontSize: 13,
+                                  fontWeight: on
+                                      ? FontWeight.w700
+                                      : FontWeight.w600)),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ]),
             ),
           ),
+
           if (loading)
             const Positioned(
-              top: 60,
+              top: 62,
               right: 0,
               left: 0,
               child: Center(
@@ -258,32 +444,56 @@ class _MapScreenState extends State<MapScreen> {
                         color: cGreen, strokeWidth: 2.6)),
               ),
             ),
+
           if (!loading && pins.isEmpty)
             Center(
               child: Container(
-                margin: const EdgeInsets.symmetric(horizontal: 40),
-                padding: const EdgeInsets.all(18),
+                margin: const EdgeInsets.symmetric(horizontal: 36),
+                padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
                     color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
+                    borderRadius: BorderRadius.circular(18),
                     border: Border.all(color: cBorder)),
                 child: Column(mainAxisSize: MainAxisSize.min, children: [
-                  const Icon(Icons.location_off_outlined,
+                  const Icon(Icons.filter_alt_off_outlined,
                       color: cGrey, size: 32),
-                  const SizedBox(height: 10),
-                  Text(
-                      _city == 'الكل'
-                          ? 'لا توجد أماكن محدّدة على الخريطة بعد'
-                          : 'لا توجد أماكن محدّدة في $_city',
+                  const SizedBox(height: 12),
+                  const Text('لا توجد أماكن بهذه التصفية',
                       textAlign: TextAlign.center,
-                      style: const TextStyle(color: cDark, fontSize: 13)),
-                  const SizedBox(height: 4),
-                  const Text('الأماكن التي حُدّد موقعها فقط تظهر هنا',
+                      style: TextStyle(
+                          color: cDark,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 6),
+                  const Text('جرّب توسيع الخيارات',
                       textAlign: TextAlign.center,
-                      style: TextStyle(color: cGrey, fontSize: 11)),
+                      style: TextStyle(color: cGrey, fontSize: 12)),
+                  const SizedBox(height: 14),
+                  GestureDetector(
+                    onTap: () {
+                      _type = 'all';
+                      _city = 'الكل';
+                      _safeOnly = false;
+                      _apply();
+                    },
+                    behavior: HitTestBehavior.opaque,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 18, vertical: 9),
+                      decoration: BoxDecoration(
+                          color: cSafeBg,
+                          borderRadius: BorderRadius.circular(14)),
+                      child: const Text('إزالة كل الفلاتر',
+                          style: TextStyle(
+                              color: cGreen,
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w700)),
+                    ),
+                  ),
                 ]),
               ),
             ),
+
           // زر تحديد موقعي — يرتفع فوق البطاقة عند ظهورها
           Positioned(
             bottom: _sel == null ? 100 : 262,
@@ -320,6 +530,7 @@ class _MapScreenState extends State<MapScreen> {
               ),
             ),
           ),
+
           Positioned(
             bottom: 4,
             right: 8,
@@ -330,15 +541,61 @@ class _MapScreenState extends State<MapScreen> {
                   style: TextStyle(fontSize: 9, color: cGrey)),
             ),
           ),
+
           if (_sel != null)
             Positioned(
-              bottom: 92,
-              right: 12,
-              left: 12,
-              child: _card(ctx, _sel!),
-            ),
+                bottom: 92, right: 12, left: 12, child: _card(ctx, _sel!)),
         ]);
       },
+    );
+  }
+
+  /// زر التصفية — يحمل عدّاداً بعدد الفلاتر المفعّلة
+  Widget _filterButton() {
+    final n = _activeFilters;
+    final on = n > 0;
+    return GestureDetector(
+      onTap: _filterSheet,
+      child: Container(
+        height: 40,
+        alignment: Alignment.center,
+        padding: const EdgeInsets.symmetric(horizontal: 14),
+        decoration: BoxDecoration(
+          color: on ? cGreen : Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: on ? cGreen : cBorder),
+          boxShadow: [
+            BoxShadow(
+                color: Colors.black.withValues(alpha: 0.08),
+                blurRadius: 6,
+                offset: const Offset(0, 2))
+          ],
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(Icons.tune, size: 16, color: on ? Colors.white : cDark),
+          const SizedBox(width: 5),
+          Text('تصفية',
+              style: TextStyle(
+                  color: on ? Colors.white : cDark,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700)),
+          if (on) ...[
+            const SizedBox(width: 5),
+            Container(
+              width: 17,
+              height: 17,
+              alignment: Alignment.center,
+              decoration: const BoxDecoration(
+                  color: Colors.white, shape: BoxShape.circle),
+              child: Text('$n',
+                  style: const TextStyle(
+                      color: cGreen,
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w700)),
+            ),
+          ],
+        ]),
+      ),
     );
   }
 
