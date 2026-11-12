@@ -641,6 +641,13 @@ class _AccountScreenState extends State<AccountScreen> {
     );
   }
 
+  /// يفتح شاشة نشاطي على التبويب المطلوب، ويحدّث الأرقام عند الرجوع
+  Future<void> _openActivity(int tab) async {
+    await Navigator.push(
+        context, MaterialPageRoute(builder: (_) => MyActivityScreen(tab)));
+    if (mounted) _load();
+  }
+
   @override
   Widget build(BuildContext ctx) => _me == null ? _form() : _profile(ctx);
 
@@ -699,9 +706,9 @@ class _AccountScreenState extends State<AccountScreen> {
               style: const TextStyle(fontSize: 12, color: cGrey)),
           const SizedBox(height: 20),
           Row(children: [
-            _stat('${_me!['votes']}', 'تصويت'),
+            _stat('${_me!['votes']}', 'تصويت', onTap: () => _openActivity(0)),
             const SizedBox(width: 10),
-            _stat('${_me!['subs']}', 'أضفتها'),
+            _stat('${_me!['subs']}', 'أضفتها', onTap: () => _openActivity(1)),
             const SizedBox(width: 10),
             _stat('${_saved.length}', 'محفوظة'),
           ]),
@@ -981,17 +988,39 @@ class _AccountScreenState extends State<AccountScreen> {
     );
   }
 
-  Widget _stat(String a, String b) => Expanded(
-        child: Container(
-          height: 62,
-          decoration: BoxDecoration(
-              color: cSafeBg, borderRadius: BorderRadius.circular(14)),
-          child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-            Text(a,
-                style: const TextStyle(
-                    color: cGreen, fontSize: 17, fontWeight: FontWeight.w700)),
-            Text(b, style: const TextStyle(color: cGreen, fontSize: 11)),
-          ]),
+  /// البطاقة قابلة للضغط حين يكون لها قائمة تُفتح — وإلا فهي عرض فقط
+  Widget _stat(String a, String b, {VoidCallback? onTap}) => Expanded(
+        child: GestureDetector(
+          onTap: onTap,
+          behavior: HitTestBehavior.opaque,
+          child: Container(
+            height: 62,
+            decoration: BoxDecoration(
+                color: cSafeBg, borderRadius: BorderRadius.circular(14)),
+            child: Stack(children: [
+              Center(
+                child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(a,
+                          style: const TextStyle(
+                              color: cGreen,
+                              fontSize: 17,
+                              fontWeight: FontWeight.w700)),
+                      Text(b,
+                          style:
+                              const TextStyle(color: cGreen, fontSize: 11)),
+                    ]),
+              ),
+              if (onTap != null)
+                const PositionedDirectional(
+                  start: 7,
+                  top: 7,
+                  child: Icon(Icons.arrow_outward,
+                      size: 13, color: Color(0x66146C43)),
+                ),
+            ]),
+          ),
         ),
       );
 
@@ -1237,4 +1266,487 @@ class _AccountScreenState extends State<AccountScreen> {
           ),
         ),
       ]);
+}
+
+// ══════════════ نشاطي ══════════════
+
+/// تصويتاتي والأماكن التي أضفتها — تُفتح من بطاقات الإحصاء
+class MyActivityScreen extends StatefulWidget {
+  final int initialTab;
+  const MyActivityScreen(this.initialTab, {super.key});
+  @override
+  State<MyActivityScreen> createState() => _MyActivityScreenState();
+}
+
+class _MyActivityScreenState extends State<MyActivityScreen> {
+  late int _tab = widget.initialTab;
+  late Future<Map<String, dynamic>> _f;
+
+  @override
+  void initState() {
+    super.initState();
+    _f = _load();
+  }
+
+  Future<Map<String, dynamic>> _load() async {
+    final c = Supabase.instance.client;
+    final u = c.auth.currentUser;
+    if (u == null) return {'votes': [], 'subs': []};
+
+    List votes = [];
+    List subs = [];
+    try {
+      votes = await c
+          .from('votes')
+          .select('id,safety_experience,star_rating,comment,visited_at,'
+              'created_at,dishes(name_ar,image_url),places(${Place.cols})')
+          .eq('user_id', u.id)
+          .order('created_at', ascending: false);
+    } catch (_) {}
+    try {
+      subs = await c
+          .from('place_submissions')
+          .select('id,name,city,place_type,status,created_at,logo_url,'
+              'resulting_place_id')
+          .eq('submitted_by', u.id)
+          .order('created_at', ascending: false);
+    } catch (_) {}
+    return {'votes': votes, 'subs': subs};
+  }
+
+  void _refresh() => setState(() => _f = _load());
+
+  void _snack(String t) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(t, style: const TextStyle(fontSize: 13)),
+      backgroundColor: cAmber,
+      behavior: SnackBarBehavior.floating,
+    ));
+  }
+
+  Future<void> _openPlace(Place p) async {
+    await Navigator.push(
+        context, MaterialPageRoute(builder: (_) => DetailsScreen(p)));
+    if (mounted) _refresh();
+  }
+
+  /// المساهمة تفتح المكان الناتج إن نُشر — وإلا نوضّح لماذا لا تُفتح
+  Future<void> _openSubmission(Map<String, dynamic> s) async {
+    final pid = s['resulting_place_id'] as String?;
+    if (pid == null) {
+      _snack('لم يُنشر هذا المكان بعد');
+      return;
+    }
+    try {
+      final row = await Supabase.instance.client
+          .from('places')
+          .select(Place.cols)
+          .eq('id', pid)
+          .maybeSingle();
+      if (row == null) {
+        _snack('المكان لم يعد متاحاً');
+        return;
+      }
+      await _openPlace(Place.fromMap(row));
+    } catch (_) {
+      _snack('تعذّر فتح المكان');
+    }
+  }
+
+  String _ago(DateTime d) {
+    final n = DateTime.now().difference(d).inDays;
+    if (n <= 0) return 'اليوم';
+    if (n == 1) return 'أمس';
+    if (n < 30) return 'قبل $n يوماً';
+    final m = (n / 30).floor();
+    if (m < 12) return m == 1 ? 'قبل شهر' : 'قبل $m أشهر';
+    final y = (m / 12).floor();
+    return y == 1 ? 'قبل سنة' : 'قبل $y سنوات';
+  }
+
+  @override
+  Widget build(BuildContext ctx) {
+    return Scaffold(
+      backgroundColor: cBg,
+      body: SafeArea(
+        child: Column(children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 10, 14, 6),
+            child: Row(children: [
+              SizedBox(
+                width: 44,
+                child: IconButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    icon: const Icon(Icons.arrow_back_ios,
+                        size: 18, color: cDark)),
+              ),
+              const Expanded(
+                child: Text('نشاطي',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        color: cDark)),
+              ),
+              const SizedBox(width: 44),
+            ]),
+          ),
+          FutureBuilder<Map<String, dynamic>>(
+            future: _f,
+            builder: (ctx, s) {
+              final votes = (s.data?['votes'] ?? []) as List;
+              final subs = (s.data?['subs'] ?? []) as List;
+              final loading = s.connectionState == ConnectionState.waiting;
+              return Expanded(
+                child: Column(children: [
+                  _tabs(votes.length, subs.length),
+                  const SizedBox(height: 12),
+                  Expanded(
+                    child: loading
+                        ? const Center(
+                            child:
+                                CircularProgressIndicator(color: cGreen))
+                        : _tab == 0
+                            ? _votesList(votes)
+                            : _subsList(subs),
+                  ),
+                ]),
+              );
+            },
+          ),
+        ]),
+      ),
+    );
+  }
+
+  Widget _tabs(int nv, int ns) {
+    Widget seg(int i, String label) {
+      final on = _tab == i;
+      return Expanded(
+        child: GestureDetector(
+          onTap: () => setState(() => _tab = i),
+          behavior: HitTestBehavior.opaque,
+          child: Container(
+            height: 40,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: on ? Colors.white : Colors.transparent,
+              borderRadius: BorderRadius.circular(12),
+              border: on ? Border.all(color: cBorder) : null,
+            ),
+            child: Text(label,
+                style: TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: on ? FontWeight.w700 : FontWeight.w500,
+                    color: on ? cDark : cGrey)),
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      height: 48,
+      margin: const EdgeInsets.symmetric(horizontal: 20),
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+          color: const Color(0xFFEDF1ED),
+          borderRadius: BorderRadius.circular(14)),
+      child: Row(children: [
+        seg(0, nv == 0 ? 'تصويتاتي' : 'تصويتاتي ($nv)'),
+        seg(1, ns == 0 ? 'أضفتها' : 'أضفتها ($ns)'),
+      ]),
+    );
+  }
+
+  Widget _empty(IconData ic, String t) => Center(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(40, 0, 40, 60),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Icon(ic, size: 38, color: cGrey),
+            const SizedBox(height: 14),
+            Text(t,
+                textAlign: TextAlign.center,
+                style:
+                    const TextStyle(color: cGrey, fontSize: 13, height: 1.7)),
+          ]),
+        ),
+      );
+
+  // ── تصويتاتي ──
+
+  Widget _votesList(List votes) {
+    if (votes.isEmpty) {
+      return _empty(Icons.how_to_vote_outlined,
+          'لم تصوّت بعد — شارك تجربتك مع أي مطعم أو طبق');
+    }
+    return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 40),
+      itemCount: votes.length,
+      itemBuilder: (_, i) => _voteCard(votes[i] as Map<String, dynamic>),
+    );
+  }
+
+  Widget _voteCard(Map<String, dynamic> v) {
+    final pm = v['places'];
+    if (pm is! Map<String, dynamic>) return const SizedBox.shrink();
+    final p = Place.fromMap(pm);
+    final dm = v['dishes'];
+    final dishName = dm is Map ? dm['name_ar'] as String? : null;
+    final dishImg = dm is Map ? dm['image_url'] as String? : null;
+    final exp = (v['safety_experience'] as String?) ?? '';
+    final stars = (v['star_rating'] as num?)?.toInt();
+    final cm = (v['comment'] as String?)?.trim();
+    final when = DateTime.tryParse('${v['visited_at'] ?? v['created_at']}');
+
+    final isSafe = exp == 'SAFE_NO_SYMPTOMS';
+    final isMild = exp == 'MILD_SYMPTOMS';
+    final fg = isSafe ? cGreen : (isMild ? cAmber : const Color(0xFFC0392B));
+    final bg =
+        isSafe ? cSafeBg : (isMild ? cAmberBg : const Color(0xFFFBECEA));
+    final label = isSafe
+        ? 'آمن — بلا أعراض'
+        : isMild
+            ? 'أعراض خفيفة'
+            : 'غير آمن';
+    final icon = isSafe
+        ? Icons.check_circle
+        : isMild
+            ? Icons.warning_amber_rounded
+            : Icons.report_gmailerrorred;
+
+    return GestureDetector(
+      onTap: () => _openPlace(p),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: cBorder)),
+        child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(children: [
+                // صورة الطبق إن كان التصويت على طبق، وإلا شعار المكان
+                if (dishName != null)
+                  Container(
+                    width: 48,
+                    height: 48,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: cBg,
+                      borderRadius: BorderRadius.circular(13),
+                      border: Border.all(color: cBorder),
+                      image: (dishImg != null && dishImg.trim().isNotEmpty)
+                          ? DecorationImage(
+                              image: NetworkImage(dishImg),
+                              fit: BoxFit.cover)
+                          : null,
+                    ),
+                    child: (dishImg != null && dishImg.trim().isNotEmpty)
+                        ? null
+                        : const Icon(Icons.restaurant_menu,
+                            color: cGrey, size: 20),
+                  )
+                else
+                  PlaceAvatar(p, size: 48),
+                const SizedBox(width: 11),
+                Expanded(
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(dishName ?? p.nameAr,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                                color: cDark)),
+                        const SizedBox(height: 2),
+                        Text(
+                            dishName == null
+                                ? '${p.cuisine ?? ''} · ${p.branch ?? ''}'
+                                : p.nameAr,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                                fontSize: 11.5, color: cGrey)),
+                      ]),
+                ),
+                if (stars != null) ...[
+                  const SizedBox(width: 6),
+                  Row(mainAxisSize: MainAxisSize.min, children: [
+                    const Icon(Icons.star,
+                        size: 13, color: Color(0xFFF2B01E)),
+                    const SizedBox(width: 3),
+                    Text('$stars',
+                        style: const TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w700,
+                            color: cDark)),
+                  ]),
+                ],
+              ]),
+              const SizedBox(height: 11),
+              Row(children: [
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                  decoration: BoxDecoration(
+                      color: bg, borderRadius: BorderRadius.circular(12)),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(icon, size: 12, color: fg),
+                    const SizedBox(width: 4),
+                    Text(label,
+                        style: TextStyle(
+                            color: fg,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700)),
+                  ]),
+                ),
+                const Spacer(),
+                if (when != null)
+                  Text(_ago(when),
+                      style: const TextStyle(fontSize: 11, color: cGrey)),
+              ]),
+              if (cm != null && cm.isNotEmpty) ...[
+                const SizedBox(height: 9),
+                Text(cm,
+                    textAlign: TextAlign.start,
+                    style: const TextStyle(
+                        fontSize: 12.5, color: cDark, height: 1.65)),
+              ],
+            ]),
+      ),
+    );
+  }
+
+  // ── أضفتها ──
+
+  Widget _subsList(List subs) {
+    if (subs.isEmpty) {
+      return _empty(Icons.add_location_alt_outlined,
+          'لم تضف مكاناً بعد — اضغط ➕ وأضف مكاناً جرّبته');
+    }
+    return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 40),
+      itemCount: subs.length,
+      itemBuilder: (_, i) => _subCard(subs[i] as Map<String, dynamic>),
+    );
+  }
+
+  Widget _subCard(Map<String, dynamic> s) {
+    final status = (s['status'] as String?) ?? 'pending';
+    final logo = s['logo_url'] as String?;
+    final when = DateTime.tryParse('${s['created_at']}');
+    final types = {
+      'restaurant': 'مطعم',
+      'cafe': 'مقهى',
+      'bakery': 'مخبز',
+    };
+
+    late final String label;
+    late final Color fg;
+    late final Color bg;
+    late final IconData icon;
+    switch (status) {
+      case 'published':
+        label = 'منشور';
+        fg = cGreen;
+        bg = cSafeBg;
+        icon = Icons.check_circle;
+        break;
+      case 'rejected':
+        label = 'مرفوض';
+        fg = const Color(0xFFC0392B);
+        bg = const Color(0xFFFBECEA);
+        icon = Icons.cancel_outlined;
+        break;
+      case 'archived':
+        label = 'مؤرشف';
+        fg = cGrey;
+        bg = cBg;
+        icon = Icons.inventory_2_outlined;
+        break;
+      default:
+        label = 'قيد المراجعة';
+        fg = cAmber;
+        bg = cAmberBg;
+        icon = Icons.schedule;
+    }
+
+    return GestureDetector(
+      onTap: () => _openSubmission(s),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: cBorder)),
+        child: Row(children: [
+          Container(
+            width: 48,
+            height: 48,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: cBg,
+              border: Border.all(color: cBorder),
+              image: (logo != null && logo.trim().isNotEmpty)
+                  ? DecorationImage(
+                      image: NetworkImage(logo), fit: BoxFit.cover)
+                  : null,
+            ),
+            child: (logo != null && logo.trim().isNotEmpty)
+                ? null
+                : const Icon(Icons.storefront_outlined,
+                    color: cGrey, size: 22),
+          ),
+          const SizedBox(width: 11),
+          Expanded(
+            child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('${s['name']}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          color: cDark)),
+                  const SizedBox(height: 2),
+                  Text(
+                      '${types[s['place_type']] ?? ''} · ${s['city'] ?? ''}'
+                      '${when == null ? '' : ' · ${_ago(when)}'}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 11.5, color: cGrey)),
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 9, vertical: 4),
+                    decoration: BoxDecoration(
+                        color: bg, borderRadius: BorderRadius.circular(12)),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      Icon(icon, size: 12, color: fg),
+                      const SizedBox(width: 4),
+                      Text(label,
+                          style: TextStyle(
+                              color: fg,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700)),
+                    ]),
+                  ),
+                ]),
+          ),
+          if (s['resulting_place_id'] != null) ...[
+            const SizedBox(width: 6),
+            const Icon(Icons.arrow_forward_ios, size: 14, color: cGrey),
+          ],
+        ]),
+      ),
+    );
+  }
 }
