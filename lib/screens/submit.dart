@@ -6,6 +6,14 @@ import 'package:latlong2/latlong.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../core.dart';
 
+/// طبق مقترح أثناء إضافة مكان جديد — اسم وصورة اختيارية
+class _DishDraft {
+  final TextEditingController name = TextEditingController();
+  Uint8List? preview;
+  String? imageUrl;
+  bool uploading = false;
+}
+
 class SubmitScreen extends StatefulWidget {
   const SubmitScreen({super.key});
   @override
@@ -14,8 +22,8 @@ class SubmitScreen extends StatefulWidget {
 
 class _SubmitScreenState extends State<SubmitScreen> {
   final _name = TextEditingController();
-  final _dishes = TextEditingController();
   final _note = TextEditingController();
+  final List<_DishDraft> _dishes = [_DishDraft()];
   late String _city;
   String _type = 'restaurant';
   String _safety = 'UNKNOWN';
@@ -31,6 +39,16 @@ class _SubmitScreenState extends State<SubmitScreen> {
   void initState() {
     super.initState();
     _city = Cities.all.isNotEmpty ? Cities.all.first : 'الرياض';
+  }
+
+  @override
+  void dispose() {
+    for (final d in _dishes) {
+      d.name.dispose();
+    }
+    _name.dispose();
+    _note.dispose();
+    super.dispose();
   }
 
   static const types = {
@@ -50,6 +68,11 @@ class _SubmitScreenState extends State<SubmitScreen> {
       : k == 'SHARED_PREP'
           ? cAmber
           : cGrey;
+
+  bool get _anyUploading =>
+      _upLogo || _dishes.any((d) => d.uploading);
+
+  // ــــــــ شعار المكان ــــــــ
 
   Future<void> _pickLogo(ImageSource src) async {
     final c = Supabase.instance.client;
@@ -147,6 +170,105 @@ class _SubmitScreenState extends State<SubmitScreen> {
     );
   }
 
+  // ــــــــ صور الأطباق ــــــــ
+
+  Future<void> _pickDishImage(_DishDraft d, ImageSource src) async {
+    final c = Supabase.instance.client;
+    final u = c.auth.currentUser;
+    if (u == null) {
+      setState(() => _msg = 'سجّل الدخول من تبويب «حسابي» أولاً');
+      return;
+    }
+    try {
+      final x = await ImagePicker()
+          .pickImage(source: src, maxWidth: 900, imageQuality: 82);
+      if (x == null) return;
+      final bytes = await x.readAsBytes();
+      if (bytes.lengthInBytes > 3 * 1024 * 1024) {
+        setState(() => _msg = 'الصورة أكبر من ٣ ميجابايت');
+        return;
+      }
+      setState(() {
+        d.preview = bytes;
+        d.uploading = true;
+        _msg = null;
+      });
+      // نفس المسار المسموح للمستخدم في سياسات التخزين
+      final path = 'submissions/${u.id}/dish_'
+          '${DateTime.now().millisecondsSinceEpoch}.jpg';
+      await c.storage.from('places').uploadBinary(path, bytes,
+          fileOptions: const FileOptions(
+              upsert: true, contentType: 'image/jpeg'));
+      final url = c.storage.from('places').getPublicUrl(path);
+      if (mounted) {
+        setState(() {
+          d.imageUrl = url;
+          d.uploading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          d.uploading = false;
+          d.preview = null;
+          _msg = 'تعذّر رفع صورة الطبق — حاول مرة أخرى';
+        });
+      }
+    }
+  }
+
+  void _dishImageSheet(_DishDraft d) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
+      builder: (sctx) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const SizedBox(height: 10),
+          Container(
+              width: 42,
+              height: 4,
+              decoration: BoxDecoration(
+                  color: cBorder, borderRadius: BorderRadius.circular(2))),
+          const SizedBox(height: 14),
+          ListTile(
+            leading: const Icon(Icons.photo_library_outlined, color: cGreen),
+            title: const Text('اختيار من الصور',
+                style: TextStyle(fontSize: 14, color: cDark)),
+            onTap: () {
+              Navigator.pop(sctx);
+              _pickDishImage(d, ImageSource.gallery);
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.photo_camera_outlined, color: cGreen),
+            title: const Text('التقاط صورة',
+                style: TextStyle(fontSize: 14, color: cDark)),
+            onTap: () {
+              Navigator.pop(sctx);
+              _pickDishImage(d, ImageSource.camera);
+            },
+          ),
+          if (d.preview != null)
+            ListTile(
+              leading: const Icon(Icons.delete_outline, color: cAmber),
+              title: const Text('حذف الصورة',
+                  style: TextStyle(fontSize: 14, color: cAmber)),
+              onTap: () {
+                Navigator.pop(sctx);
+                setState(() {
+                  d.preview = null;
+                  d.imageUrl = null;
+                });
+              },
+            ),
+          const SizedBox(height: 8),
+        ]),
+      ),
+    );
+  }
+
   Future<void> _pickLocation() async {
     final r = await Navigator.push<LatLng>(
       context,
@@ -227,8 +349,8 @@ class _SubmitScreenState extends State<SubmitScreen> {
       setState(() => _msg = 'اكتب اسم المكان');
       return;
     }
-    if (_upLogo) {
-      setState(() => _msg = 'انتظر اكتمال رفع الشعار');
+    if (_anyUploading) {
+      setState(() => _msg = 'انتظر اكتمال رفع الصور');
       return;
     }
     setState(() {
@@ -236,17 +358,23 @@ class _SubmitScreenState extends State<SubmitScreen> {
       _msg = null;
     });
     try {
-      final list = _dishes.text
-          .split(',')
-          .map((e) => e.trim())
-          .where((e) => e.isNotEmpty)
-          .toList();
+      // نرسل الأطباق كـ jsonb ليحمل كل طبق صورته،
+      // ونرسل الأسماء في العمود النصّي القديم للتوافق مع لوحة التحكم.
+      final json = <Map<String, dynamic>>[];
+      final names = <String>[];
+      for (final d in _dishes) {
+        final n = d.name.text.trim();
+        if (n.isEmpty) continue;
+        names.add(n);
+        json.add({'name': n, 'image_url': d.imageUrl});
+      }
       await Supabase.instance.client.from('place_submissions').insert({
         'name': _name.text.trim(),
         'city': _city,
         'place_type': _type,
         'claimed_safety': _safety,
-        'suggested_dishes': list.isEmpty ? null : list,
+        'suggested_dishes': names.isEmpty ? null : names,
+        'suggested_dishes_json': json.isEmpty ? null : json,
         'note': _note.text.trim().isEmpty ? null : _note.text.trim(),
         'logo_url': _logoUrl,
         'lat': _at?.latitude,
@@ -399,10 +527,90 @@ class _SubmitScreenState extends State<SubmitScreen> {
                         style: const TextStyle(fontSize: 11, color: cGrey)),
                   ]),
             ),
-            const Icon(Icons.arrow_back_ios, size: 14, color: cGrey),
+            const Icon(Icons.arrow_forward_ios, size: 14, color: cGrey),
           ]),
         ),
       );
+
+  /// سطر طبق واحد — مربع صورة واسم وزر حذف
+  Widget _dishRow(int i) {
+    final d = _dishes[i];
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: cBorder)),
+        child: Row(children: [
+          GestureDetector(
+            onTap: () => _dishImageSheet(d),
+            child: Stack(alignment: Alignment.center, children: [
+              Container(
+                width: 56,
+                height: 56,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: cBg,
+                  borderRadius: BorderRadius.circular(13),
+                  border: Border.all(color: cBorder),
+                  image: d.preview == null
+                      ? null
+                      : DecorationImage(
+                          image: MemoryImage(d.preview!), fit: BoxFit.cover),
+                ),
+                child: d.preview == null
+                    ? const Icon(Icons.add_a_photo_outlined,
+                        color: cGrey, size: 20)
+                    : null,
+              ),
+              if (d.uploading)
+                Container(
+                  width: 56,
+                  height: 56,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(13),
+                      color: Colors.black.withValues(alpha: 0.35)),
+                  child: const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                          color: Colors.white, strokeWidth: 2.2)),
+                ),
+            ]),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: TextField(
+              controller: d.name,
+              textAlign: TextAlign.start,
+              decoration: const InputDecoration(
+                  border: InputBorder.none,
+                  isDense: true,
+                  hintText: 'اسم الطبق',
+                  hintStyle: TextStyle(color: cGrey, fontSize: 13)),
+              style: const TextStyle(fontSize: 14.5, color: cDark),
+            ),
+          ),
+          if (_dishes.length > 1)
+            GestureDetector(
+              onTap: () => setState(() {
+                _dishes[i].name.dispose();
+                _dishes.removeAt(i);
+              }),
+              behavior: HitTestBehavior.opaque,
+              child: const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 6),
+                child:
+                    Icon(Icons.close, size: 18, color: cGrey),
+              ),
+            ),
+        ]),
+      ),
+    );
+  }
 
   Widget _form(BuildContext ctx) => ListView(
         padding: const EdgeInsets.all(20),
@@ -496,8 +704,44 @@ class _SubmitScreenState extends State<SubmitScreen> {
             );
           }),
           const SizedBox(height: 10),
-          _label('أطباق آمنة مقترحة'),
-          _input(_dishes, 'افصل بين الأطباق بفاصلة'),
+          Row(children: [
+            const Text('أطباق آمنة مقترحة',
+                style: TextStyle(
+                    fontSize: 13, fontWeight: FontWeight.w700, color: cDark)),
+            const Spacer(),
+            const Text('اختياري',
+                style: TextStyle(fontSize: 11.5, color: cGrey)),
+          ]),
+          const SizedBox(height: 4),
+          const Row(children: [
+            Expanded(
+              child: Text('اضغط المربع لإضافة صورة الطبق',
+                  style: TextStyle(fontSize: 11, color: cGrey)),
+            ),
+          ]),
+          const SizedBox(height: 8),
+          ...List.generate(_dishes.length, _dishRow),
+          GestureDetector(
+            onTap: () => setState(() => _dishes.add(_DishDraft())),
+            behavior: HitTestBehavior.opaque,
+            child: Container(
+              height: 46,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                  color: cSafeBg, borderRadius: BorderRadius.circular(14)),
+              child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.add, size: 17, color: cGreen),
+                    SizedBox(width: 5),
+                    Text('أضف طبقاً آخر',
+                        style: TextStyle(
+                            fontSize: 13,
+                            color: cGreen,
+                            fontWeight: FontWeight.w700)),
+                  ]),
+            ),
+          ),
           const SizedBox(height: 16),
           _label('ملاحظات (اختياري)'),
           Container(
@@ -519,7 +763,7 @@ class _SubmitScreenState extends State<SubmitScreen> {
           ),
           const SizedBox(height: 22),
           FilledButton(
-            onPressed: _busy ? null : _send,
+            onPressed: (_busy || _anyUploading) ? null : _send,
             style: FilledButton.styleFrom(
                 backgroundColor: cGreen,
                 minimumSize: const Size.fromHeight(54),
@@ -531,9 +775,9 @@ class _SubmitScreenState extends State<SubmitScreen> {
                     height: 20,
                     child: CircularProgressIndicator(
                         color: Colors.white, strokeWidth: 2))
-                : const Text('نشر المكان',
-                    style:
-                        TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                : Text(_anyUploading ? 'انتظر رفع الصور…' : 'نشر المكان',
+                    style: const TextStyle(
+                        fontSize: 16, fontWeight: FontWeight.w700)),
           ),
           if (_msg != null) ...[
             const SizedBox(height: 12),
